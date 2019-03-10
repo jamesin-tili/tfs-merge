@@ -1,0 +1,212 @@
+﻿<UserControl x:Class="TFSMergingTool.Merging.MergeFromListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:TFSMergingTool.Merging"
+             xmlns:cal="http://www.caliburnproject.org"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
+             xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+             xmlns:ui="clr-namespace:TFSMergingTool.src.Resources.UI"
+             xmlns:conv="clr-namespace:TFSMergingTool.Resources.UI.Converters"
+             xmlns:diag="clr-namespace:System.Diagnostics;assembly=WindowsBase"
+             mc:Ignorable="d" 
+             d:DesignHeight="500" d:DesignWidth="800" Background="WhiteSmoke">
+    <DockPanel Margin="10">
+        <WrapPanel DockPanel.Dock="Bottom" HorizontalAlignment="Left">
+            <Button x:Name="GotoConnectionSetup" Width="100" Height="50">
+                <WrapPanel>
+                    <iconPacks:PackIconModern Kind="ChevronLeft" />
+                    <TextBlock Text="Back" Padding="0" Margin="5,0,0,0" />
+                </WrapPanel>
+            </Button>
+        </WrapPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" Name="MainColumn"/>
+                <ColumnDefinition Width="40"/>
+                <ColumnDefinition Width="120" Name="ButtonColumn"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto" Name="TitleRow"/>
+                <RowDefinition Height="20" />
+                <RowDefinition Height="auto" Name="BranchesRow"/>
+                <RowDefinition Height="20" />
+                <RowDefinition Height="auto" Name="ListTitleRow"/>
+                <RowDefinition Height="10" />
+                <RowDefinition Height="*" Name="ListRow"/>
+                <RowDefinition Height="10" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Column="0" Grid.ColumnSpan="3" Text="Merge from list" Style="{StaticResource ScreenHeader}"/>
+
+            <!-- Branches -->
+            <DockPanel Grid.Row="2">
+                <TextBlock Text="Branch order:" Padding="3" DockPanel.Dock="Left" Margin="0,0,10,0" />
+                <Button  DockPanel.Dock="Right" Margin="5,0" x:Name="ReverseBranches" Content="{iconPacks:PackIconModern ArrowLeftRight}" Style="{StaticResource IconButtonStyle}"
+                         ToolTip="Reverse order."/>
+                <TextBox IsReadOnly="True" HorizontalContentAlignment="Right" BorderBrush="Black" Background="GhostWhite"
+                             Text="{Binding BranchSequence, Mode=OneWay}"
+                         ToolTip="Branch chain.&#x0a;All selected changesets will be merged from&#x0a;the first to the last branch via any branches in between." />
+            </DockPanel>
+
+            <!-- Candidates title -->
+            <DockPanel Grid.Row="4">
+                <Button DockPanel.Dock="Right" Margin="5,0" x:Name="RefreshCandidates" ToolTip="Get merge candidates from 1st to 2nd branch." >
+                    <WrapPanel>
+                        <iconPacks:PackIconModern Kind="Refresh" />
+                        <TextBlock Text="Candidates" Padding="0" Margin="5,0,0,0" />
+                    </WrapPanel>
+                </Button>
+                <Button DockPanel.Dock="Right" Margin="5,0" x:Name="RefreshChangesets" ToolTip="Get latest commits to 1st branch.&#x0a;Note that these might not all be valid for merging." >
+                    <WrapPanel>
+                        <iconPacks:PackIconModern Kind="Refresh" />
+                        <TextBlock Text="Changesets" Padding="0" Margin="5,0,0,0" />
+                    </WrapPanel>
+                </Button>
+                <TextBlock DockPanel.Dock="Left" Text="Available items:" VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Left" x:Name="NumCandidates" HorizontalAlignment="Left" VerticalAlignment="Center" />
+
+                <ui:SearchTextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Height="{Binding ActualHeight, ElementName=RefreshCandidates}"
+                                  Watermark="Filter text..."/>
+            </DockPanel>
+
+            <StackPanel Grid.Row="4" Grid.Column="2">
+                <StackPanel.Resources>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="10" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                    <Style TargetType="CheckBox">
+                        <Setter Property="FlowDirection" Value="RightToLeft" />
+                    </Style>
+                </StackPanel.Resources>
+                <DockPanel >
+                    <TextBlock Text="Max Changesets" Margin="0,0,10,0"/>
+                    <TextBox x:Name="MaxItemCount" Text="36" HorizontalContentAlignment="Right" ToolTip="Max number of items to show.&#x0a;Only affects Changesets, not Candidates."/>
+                </DockPanel>
+
+                <CheckBox x:Name="GetWorkItemData" HorizontalContentAlignment="Right" ToolTip="Whether to get detailed Work Item data or not.">
+                    <TextBlock Text="Get Work Item data" />
+                </CheckBox>
+
+            </StackPanel>
+
+            <!-- Candidates -->
+            <DataGrid Grid.Row="6" Grid.Column="0" x:Name="CandidateListView"
+                      IsReadOnly="True" GridLinesVisibility="None" CellStyle="{StaticResource MyDataGridCellStyle}" AutoGenerateColumns="False" 
+                      ScrollViewer.CanContentScroll="True" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" 
+                      Sorting="CandidateListView_Sorting"
+                      cal:Message.Attach="[Event KeyDown] = [Action MenuOpenSelectedInBrowser($eventArgs)]">
+                <DataGrid.Resources>
+                    <ContextMenu x:Key="RowMenu" cal:Action.TargetWithoutContext="{Binding Path=PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                        <MenuItem Header="Show Details" cal:Message.Attach="MenuShowDetails($dataContext)" />
+                        <MenuItem Header="Copy selected to clipboard" cal:Message.Attach="MenuSelectedToClipboard" />
+                        <MenuItem Header="Copy comment to clipboard" cal:Message.Attach="MenuCommentToClipboard($dataContext)" />
+                        <MenuItem Header="Open Work Item in Browser" cal:Message.Attach="MenuOpenSelectedInBrowser($dataContext)" />
+                        <MenuItem Header="Update Work Item fields..." cal:Message.Attach="MenuEditWorkItemFields" />
+                    </ContextMenu>
+                </DataGrid.Resources>
+                <DataGrid.RowStyle>
+                    <Style TargetType="{x:Type DataGridRow}">
+                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Setter Property="ContextMenu" Value="{StaticResource RowMenu}" />
+                        <Setter Property="Tag" Value="{Binding DataContext, ElementName=CandidateListView}" />
+                        <EventSetter Event="Control.RequestBringIntoView" Handler="DataGrid_Documents_RequestBringIntoView" />
+                        <Setter Property="ToolTip">
+                            <Setter.Value>
+                                <ToolTip ToolTipService.InitialShowDelay="1000" ToolTipService.ShowDuration="30000">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="25" Name="SpaceRow"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                            <RowDefinition Height="auto"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Id" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Changeset.ChangesetId}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Creation Date" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Changeset.CreationDate}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Comment" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Changeset.Comment}" />
+                                        <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Text="ASSOCIATED WORK ITEM DATA" />
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Id" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding WiProperties.Id}" />
+                                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Title" />
+                                        <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding WiProperties.Title}" />
+                                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Type" />
+                                        <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding WiProperties.Type}" />
+                                        <TextBlock Grid.Row="8" Grid.Column="0" Text="State" />
+                                        <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding WiProperties.State}" />
+                                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Priority" />
+                                        <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding WiProperties.Priority}" />
+                                        <TextBlock Grid.Row="10" Grid.Column="0" Text="Severity" />
+                                        <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding WiProperties.Severity}" />
+                                        <TextBlock Grid.Row="11" Grid.Column="0" Text="Origin" />
+                                        <TextBlock Grid.Row="11" Grid.Column="1" Text="{Binding WiProperties.Origin}" />
+                                        <TextBlock Grid.Row="12" Grid.Column="0" Text="Planned Release" />
+                                        <TextBlock Grid.Row="12" Grid.Column="1" Text="{Binding WiProperties.PlannedRelease}" />
+                                        <TextBlock Grid.Row="13" Grid.Column="0" Text="Assigned to" />
+                                        <TextBlock Grid.Row="13" Grid.Column="1" Text="{Binding WiProperties.AssignedTo}" />
+                                    </Grid>
+                                </ToolTip>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </DataGrid.RowStyle>
+                <DataGrid.Columns>
+                    <DataGridCheckBoxColumn Width="20" Header="p" Binding="{Binding Partial, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="Id" Binding="{Binding Changeset.ChangesetId, Mode=OneWay}" MaxWidth="50"/>
+                    <DataGridTextColumn     Width="3*" Header="User" Binding="{Binding Changeset.OwnerDisplayName, Mode=OneWay}" MaxWidth="100"/>
+                    <DataGridTextColumn     Width="2*" Header="Date" Binding="{Binding Changeset.CreationDate, Mode=OneWay}" MaxWidth="70"/>
+                    <DataGridTextColumn     Width="20*" Header="Comment" Binding="{Binding Changeset.Comment, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="WI Ids" Binding="{Binding WorkItemList, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="Type" Binding="{Binding WiProperties.Type, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="State" Binding="{Binding WiProperties.State, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="Origin" Binding="{Binding WiProperties.Origin, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="Severity" Binding="{Binding WiProperties.Severity, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="Priority" Binding="{Binding WiProperties.Priority, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="Release" Binding="{Binding WiProperties.PlannedRelease, Mode=OneWay}" />
+                    <DataGridTextColumn     Width="2*" Header="Assigned to" Binding="{Binding WiProperties.AssignedTo, Mode=OneWay}" />
+                </DataGrid.Columns>
+            </DataGrid>
+            <StackPanel Grid.Column="4" Grid.Row="6" VerticalAlignment="Center">
+                <StackPanel.Resources>
+                    <Style TargetType="Button">
+                        <Setter Property="Margin" Value="0,15,0,0" />
+                    </Style>
+                </StackPanel.Resources>
+                <!-- Operation options -->
+                <GroupBox Header="Merge options" >
+                    <StackPanel Margin="0,5,0,0">
+                        <CheckBox Content="Discard" Name="OptionDiscardIsChecked" ToolTip="Does not perform the merge operation, &#x0a;but updates the merge history to track that the merge occurred"/>
+                        <CheckBox Content="Force" Name="OptionForceIsChecked" ToolTip="Ignores the merge history and merges the &#x0a;specified changes from the source into the destination, &#x0a;even if some or all these changes have been merged before."/>
+                        <CheckBox Content="Baseless" Name="OptionBaselessIsChecked" ToolTip="Performs a baseless merge (merges between branches that don't have a relationship)."/>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="Checkin options" >
+                    <StackPanel Margin="0,5,0,0">
+                        <CheckBox Content="No checkin" Name="CheckinNoCheckinIsChecked" ToolTip="Perform the merge(s), but do not check in automatically."/>
+                    </StackPanel>
+                </GroupBox>
+                <!-- Operation buttons -->
+                <Button x:Name="StartMergeOneByOne" Content="Merge one by one" ToolTip="Merge + check in all selected source branch &#x0a;changesets one by one through the branch chain."/>
+                <Button x:Name="StartMergeRange" Content="Combine range" ToolTip="Merges a range of changesets from the source to target branch, then checks in the changes.&#x0a;This is NOT selective: it'll merge from the lowest selected Id to the highest.&#x0a;Will ask the user for the comment, with an option to cancel."/>
+                <Button x:Name="ShowSelection" Content="Show selection" Visibility="Visible" Foreground="DarkGray" Background="WhiteSmoke" />
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,94 @@
+﻿<UserControl x:Class="TFSMergingTool.ConnectionSetup.ConnectionSetupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:TFSMergingTool.ConnectionSetup"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
+             xmlns:cal="http://www.caliburnproject.org"
+             mc:Ignorable="d" 
+             d:DesignHeight="500" d:DesignWidth="500" Background="WhiteSmoke">
+    <DockPanel Margin="10">
+
+        <!-- Start button -->
+        <StackPanel DockPanel.Dock="Bottom" HorizontalAlignment="Right" >
+            <Button Margin="0,0,0,10" Width="100" Height="50" cal:Message.Attach="[Event Click] = [Action GotoMergeFromList(1)]" >
+                <WrapPanel>
+                    <TextBlock Text="Start" Padding="0" Margin="0,0,5,0" />
+                    <iconPacks:PackIconModern Kind="ChevronRight" />
+                </WrapPanel>
+            </Button>
+            <Button Visibility="Collapsed" Content="Merge by _ID >" cal:Message.Attach="[Event Click] = [Action GotoMergeFromList(2)]" ToolTip="Deprecated. Use list mode." Margin="0,0,0,10"/>
+        </StackPanel>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="70"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="5*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="100"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto" Name="TitleRow"/>
+                <RowDefinition Height="10" />
+                <RowDefinition Height="auto" Name="ServerUriRow"/>
+                <RowDefinition Height="10" />
+                <RowDefinition Height="auto" Name="TfsExePathRow"/>
+                <RowDefinition Height="30" />
+                <RowDefinition Height="auto" Name="BranchesTitleRow"/>
+                <RowDefinition Height="10" />
+                <RowDefinition Height="200" Name="BranchesListRow"/>
+                <RowDefinition Height="10" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Column="0" Grid.ColumnSpan="3" Text="Connect to server" Style="{StaticResource ScreenHeader}"/>
+            <Button Grid.Column="4" x:Name="SelectNewSettingsFile" Content="Load _settings..." />
+            
+            <!-- Server address -->
+            <TextBlock Grid.Row="2" Text="Server Uri:" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            <TextBox Grid.Row="2" Grid.Column="2" x:Name="ServerAddress" />
+            <StackPanel Grid.Row="2" Grid.Column="4" Orientation="Horizontal" >
+                <Button x:Name="ConnectToServer" Content="{iconPacks:PackIconModern NetworkServerConnecting}" Style="{StaticResource IconButtonStyle}" 
+                    ToolTip="Connect to server.&#x0a;Not necessary; just go directly to merging."/>
+                <Button x:Name="DisconnectFromServer" Content="{iconPacks:PackIconModern NetworkServerDisconnect}" Margin="10,0" Style="{StaticResource IconButtonStyle}" 
+                    ToolTip="Disconnect from server."/>
+            </StackPanel>
+
+            <!-- Tfs.exe path -->
+            <TextBlock Grid.Row="4" Text="Tfs.exe path:" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            <TextBox Grid.Row="4" Grid.Column="2" x:Name="TfsExePath" />
+
+            <!-- Branches -->
+            <DockPanel Grid.Column="2" Grid.Row="6">
+                <TextBlock DockPanel.Dock="Left" Text="Branches" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="RefreshBranches" Content="{iconPacks:PackIconModern Refresh}" Margin="5,0" Style="{StaticResource IconButtonStyle}"
+                        ToolTip="Load branches from memory (last opened settings file)."/>
+                    <Button x:Name="SaveBranches" Content="{iconPacks:PackIconModern Save}" Style="{StaticResource IconButtonStyle}" 
+                        ToolTip="Save branches to default user settings file." />
+                </StackPanel>
+            </DockPanel>
+            <StackPanel Grid.Row="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="AddBranch" Content="{iconPacks:PackIconModern Add}" Style="{StaticResource IconButtonStyle}"/>
+                <Button x:Name="MoveBranchUp" Content="{iconPacks:PackIconModern ArrowUp}" Style="{StaticResource IconButtonStyle}" Margin="0,5"/>
+                <Button x:Name="MoveBranchDown" Content="{iconPacks:PackIconModern ArrowDown}" Style="{StaticResource IconButtonStyle}"/>
+                <Button x:Name="RemoveBranch" Content="{iconPacks:PackIconModern Delete}" Style="{StaticResource IconButtonStyle}" Margin="0,5,0,0"/>
+            </StackPanel>
+            <ListBox Grid.Row="8" Grid.Column="2"
+                     x:Name="Branches" BorderThickness="0" ItemContainerStyle="{StaticResource MyListBoxContainerStyle}" 
+                     ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" >
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical" Background="White"/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <ContentControl cal:View.Model="{Binding}" Margin="0" Background="Transparent"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+        </Grid>
+    </DockPanel>
+</UserControl>

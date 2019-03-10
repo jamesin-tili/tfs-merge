@@ -17,23 +17,24 @@ namespace TFSMergingTool.Merging
         /// Will query for conflicts in the folder, then offer a choice to resolve them with tfs.exe.
         /// </summary>
         /// <remarks>
-        /// Will asks the user if he wants to lauch the tool until either there are no more conflicts,
+        /// Will asks the user if he wants to launch the tool until either there are no more conflicts,
         /// or until the user chooses not to launch the tool anymore.
         /// </remarks>
-        public static Tuple<bool, IList<Conflict>>
-            ResolveConflictsWithExternalExecutable(FileInfo tfExecutable, MyTFSConnection tfsConnection, string targetLocalPath, IPopupService popupService, string checkinComment = null)
+        public static Tuple<bool, IList<Conflict>> ResolveConflictsWithExternalExecutable(
+            FileInfo tfExecutable, MyTfsConnection tfsConnection, string targetLocalPath,
+            IPopupService popupService, string checkinComment = null)
         {
             Debug.Assert(tfExecutable.Exists, "tfs.exe not found.");
             Debug.Assert(!string.IsNullOrEmpty(targetLocalPath), "Local path not found.");
 
             bool success = true;
 
-            var conflicts = tfsConnection.WorkSpace.QueryConflicts(new string[] { targetLocalPath }, true);
+            Conflict[] conflicts = tfsConnection.WorkSpace.QueryConflicts(new string[] { targetLocalPath }, true);
             while (conflicts.Any())
             {
-                string msg = !string.IsNullOrEmpty(checkinComment) ?
-                    $"{conflicts.Count()} conflict(s) in target path when merging:\n  \"{checkinComment}\"." :
-                    msg = $"{conflicts.Count()} conflict(s) in target path.";
+                string msg = !string.IsNullOrEmpty(checkinComment)
+                    ? $"{conflicts.Count()} conflict(s) in target path when merging:\n  \"{checkinComment}\"."
+                    : msg = $"{conflicts.Count()} conflict(s) in target path.";
 
                 MessageBoxResult mbResult = popupService.AskYesNoQuestion(msg, "Conflict", "Launch VS merge tool", "Stop the process.");
 
@@ -49,13 +50,15 @@ namespace TFSMergingTool.Merging
                 {
                     case MessageBoxResult.Yes:
                         // https://www.visualstudio.com/en-us/docs/tfvc/resolve-command
-                        ProcessStartInfo _processStartInfo = new ProcessStartInfo();
-                        _processStartInfo.WorkingDirectory = targetLocalPath;
-                        _processStartInfo.FileName = tfExecutable.FullName;
-                        _processStartInfo.Arguments = "resolve";
-                        _processStartInfo.CreateNoWindow = true;
-                        Process myProcess = Process.Start(_processStartInfo);
-                        myProcess.WaitForExit();
+                        var processStartInfo = new ProcessStartInfo
+                        {
+                            WorkingDirectory = targetLocalPath,
+                            FileName = tfExecutable.FullName,
+                            Arguments = "resolve",
+                            CreateNoWindow = true
+                        };
+                        Process myProcess = Process.Start(processStartInfo);
+                        myProcess?.WaitForExit();
                         break;
 
                     default:
@@ -63,18 +66,13 @@ namespace TFSMergingTool.Merging
                         break;
                 }
 
-                if (success == false)
-                    break;
+                if (success == false) break;
 
                 // Check again.
                 conflicts = tfsConnection.WorkSpace.QueryConflicts(new string[] { targetLocalPath }, true);
             }
 
-            List<Conflict> retList;
-            if (success == true)
-                retList = new List<Conflict>();
-            else
-                retList = conflicts.ToList();
+            List<Conflict> retList = success ? new List<Conflict>() : conflicts.ToList();
             return new Tuple<bool, IList<Conflict>>(success, retList);
         }
     }

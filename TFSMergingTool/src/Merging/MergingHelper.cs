@@ -32,125 +32,112 @@ namespace TFSMergingTool.Merging
             AtTheEnd
         }
 
-        private static IEnumerable<WorkItem> GetRelatedWorkItems(IEnumerable<Changeset> changesets)
+        private static WorkItem[] GetRelatedWorkItems(IEnumerable<Changeset> changesets)
         {
-            var result = new List<WorkItem>();
-            foreach (var cs in changesets)
-            {
-                foreach (var wi in cs.WorkItems)
-                {
-                    result.Add(wi);
-                }
-            }
-            return result;
+            return changesets.SelectMany(cs => cs.WorkItems).ToArray();
         }
 
         /// <summary>
         /// Merges the changesets one by one. Each of the changesets is merged through all branches, ie. from first to last.
         /// </summary>
         /// <returns>A tuple, where the boolean signals success, and the string contains and error message in case of failure.</returns>
-        public static Tuple<bool, string> MergeAndCommitOneByOne(MyTFSConnection tfsConnection, IOrderedEnumerable<Changeset> changesets, IList<DirectoryInfo> branches,
-            IProgress<ProgressReportArgs> reporter, IProgress<FinishedItemReport> finishedItem, CancellationToken cancelToken, FileInfo tfExecutable, IPopupService popupService,
+        public static Tuple<bool, string> MergeAndCommitOneByOne(MyTfsConnection tfsConnection, Changeset[] changesets,
+            IList<DirectoryInfo> branches, IProgress<ProgressReportArgs> reporter, IProgress<FinishedItemReport> finishedItem,
+            CancellationToken cancelToken, FileInfo tfExecutable, IPopupService popupService,
             MergeOptionsEx mergeOptions = MergeOptionsEx.None, bool doCheckin = true, bool associateWorkItems = true)
         {
+            if (!changesets.Any() || branches.Count <= 1)
+                return Tuple.Create(false, "No changesets, or not >= 2 branches.");
+
             if (doCheckin == false)
             {
                 Debug.Assert(branches.Count == 2, "Currently not supported to have more than two branches in the chain when not checkin in after each merge.");
             }
 
-            if (changesets.Count() > 0 && branches.Count > 1)
+            // For the whole length of the list of changeset in the source branch.
+            foreach (var csOriginal in changesets)
             {
-                // For the whole length of the list of changeset in the source branch.
-                foreach (var csOriginal in changesets)
+                cancelToken.ThrowIfCancellationRequested();
+
+                // For the whole depth of the list of branch merge chain.
+                var csCurrent = tfsConnection.GetChangeset(csOriginal.ChangesetId);
+                int newCheckinId = 0;
+                for (int ii = 0; ii < branches.Count - 1; ii++)
                 {
                     cancelToken.ThrowIfCancellationRequested();
 
-                    // For the whole depth of the list of branch merge chain.
-                    var csCurrent = tfsConnection.GetChangeset(csOriginal.ChangesetId);
-                    int newCheckinId = 0;
-                    for (int ii = 0; ii < branches.Count - 1; ii++)
+                    if (csCurrent != null)
                     {
-                        cancelToken.ThrowIfCancellationRequested();
+                        var sourceBranch = branches[ii];
+                        var targetBranch = branches[ii + 1];
+                        tfsConnection.SetLocalPath(BranchType.Source, sourceBranch.FullName);
+                        tfsConnection.SetLocalPath(BranchType.Target, targetBranch.FullName);
 
-                        if (csCurrent != null)
+                        var id = csCurrent.ChangesetId;
+                        string checkinComment = CommentBuilder.GetComment(csOriginal.Comment, id, csOriginal.OwnerDisplayName,
+                            sourceBranch.Name, targetBranch.Name, mergeOptions);
+
+                        reporter?.Report(new ProgressReportArgs(0, null, "Merging: " + checkinComment));
+
+                        try
                         {
-                            var sourceBranch = branches[ii];
-                            var targetBranch = branches[ii + 1];
-                            tfsConnection.SetLocalPath(BranchType.Source, sourceBranch.FullName);
-                            tfsConnection.SetLocalPath(BranchType.Target, targetBranch.FullName);
+                            CheckInitialConflicts(tfsConnection, targetBranch, checkinComment);
 
-                            var id = csCurrent.ChangesetId;
-                            string checkinComment = CommentBuilder.GetComment(csOriginal.Comment, id, csOriginal.OwnerDisplayName, sourceBranch.Name, targetBranch.Name, mergeOptions);
+                            IList<Conflict> conflicts = tfsConnection.Merge(id, id, mergeOptions);
 
-                            reporter?.Report(new ProgressReportArgs(0, null, "Merging: " + checkinComment));
+                            cancelToken.ThrowIfCancellationRequested();
 
-                            try
+                            if (conflicts.Count > 0 && !conflicts.All(c => c.AutoResolved))
                             {
-                                CheckInitialConflicts(tfsConnection, targetBranch, checkinComment);
+                                //ResolveConflictsWithAPICall(conflicts, tfsConnection, checkinComment);
+                                var conflictRetval = ConflictResolver.ResolveConflictsWithExternalExecutable(
+                                    tfExecutable, tfsConnection, targetBranch.FullName, popupService, checkinComment);
 
-                                IList<Conflict> conflicts = tfsConnection.Merge(id, id, mergeOptions);
+                                if (conflictRetval.Item1 == false)
+                                    throw new MyTfsConflictException(conflictRetval.Item2.Count() + " unresolved conflicts.");
 
                                 cancelToken.ThrowIfCancellationRequested();
-
-                                if (conflicts.Count > 0 && !conflicts.All(c => c.AutoResolved))
-                                {
-                                    //ResolveConflictsWithAPICall(conflicts, tfsConnection, checkinComment);
-                                    var conflictRetval = ConflictResolver.ResolveConflictsWithExternalExecutable(
-                                                            tfExecutable, tfsConnection, targetBranch.FullName, popupService, checkinComment);
-
-                                    if (conflictRetval.Item1 == false)
-                                    {
-                                        throw new MyTFSConflictExeption(conflictRetval.Item2.Count() + " unresolved conflicts.");
-                                    }
-                                    cancelToken.ThrowIfCancellationRequested();
-                                }
-
-                                if (doCheckin == true)
-                                {
-                                    reporter?.Report(new ProgressReportArgs(1, null, "Checkin: " + checkinComment));
-
-                                    var workItems = associateWorkItems ? csCurrent.WorkItems : new WorkItem[0];
-                                    workItems = FilterWorkItemsToUpdate(workItems);
-                                    newCheckinId = tfsConnection.Checkin(checkinComment, workItems);
-                                }
-
-                                reporter?.Report(new ProgressReportArgs(1));
-                                if (finishedItem != null)
-                                {
-                                    finishedItem.Report(new FinishedItemReport()
-                                    {
-                                        SourceChangesetId = id,
-                                        CommitChangesetId = newCheckinId,
-                                        CommitComment = checkinComment,
-                                        SourceBranchIndex = ii
-                                    });
-                                }
-
                             }
-                            catch (MyTFSConnectionException ex)
+
+                            if (doCheckin)
                             {
-                                reporter?.Report(new ProgressReportArgs(0, "Error", "Error merging changeset: " + id.ToString() + "\n\n" + ex.ToString()));
-                                return Tuple.Create(false, ex.ToString());
+                                reporter?.Report(new ProgressReportArgs(1, null, "Checkin: " + checkinComment));
+
+                                var workItems = associateWorkItems ? csCurrent.WorkItems : new WorkItem[0];
+                                workItems = FilterWorkItemsToUpdate(workItems);
+                                newCheckinId = tfsConnection.Checkin(checkinComment, workItems);
                             }
 
+                            reporter?.Report(new ProgressReportArgs(1));
+
+                            finishedItem?.Report(new FinishedItemReport()
+                            {
+                                SourceChangesetId = id,
+                                CommitChangesetId = newCheckinId,
+                                CommitComment = checkinComment,
+                                SourceBranchIndex = ii
+                            });
+
                         }
-                        else
+                        catch (MyTfsConnectionException ex)
                         {
-                            var errorMsg = "Error getting changeset information for id " + csOriginal.ChangesetId + ". Operation aborted.";
-                            reporter?.Report(new ProgressReportArgs(0, "Error", errorMsg));
-                            return Tuple.Create(false, errorMsg);
+                            reporter?.Report(new ProgressReportArgs(0, "Error", "Error merging changeset: " + id.ToString() + "\n\n" + ex.ToString()));
+                            return Tuple.Create(false, ex.ToString());
                         }
 
-                        if (newCheckinId > 0) csCurrent = tfsConnection.GetChangeset(newCheckinId);
+                    }
+                    else
+                    {
+                        var errorMsg = "Error getting changeset information for id " + csOriginal.ChangesetId + ". Operation aborted.";
+                        reporter?.Report(new ProgressReportArgs(0, "Error", errorMsg));
+                        return Tuple.Create(false, errorMsg);
                     }
 
+                    if (newCheckinId > 0) csCurrent = tfsConnection.GetChangeset(newCheckinId);
                 }
-
-                return Tuple.Create(true, "Succesfully merged.");
-
             }
 
-            return Tuple.Create(false, "No changesets, or not >= 2 branches.");
+            return Tuple.Create(true, "Successfully merged.");
         }
 
         /// <summary>
@@ -168,18 +155,18 @@ namespace TFSMergingTool.Merging
                 else
                 {
                     var popups = Caliburn.Micro.IoC.Get<IPopupService>();
-                    popups.ShowMessage("Skipping work item # " + item.Id.ToString() + " update because iteration field was " + item.IterationPath);
+                    popups.ShowMessage("Skipping work item # " + item.Id + " update because iteration field was " + item.IterationPath);
                 }
             }
             return ret.ToArray();
         }
 
-        private static void CheckInitialConflicts(MyTFSConnection tfsConnection, DirectoryInfo targetBranch, string whatAreWeMerging)
+        private static void CheckInitialConflicts(MyTfsConnection tfsConnection, DirectoryInfo targetBranch, string whatAreWeMerging)
         {
             var initialConflicts = tfsConnection.WorkSpace.QueryConflicts(new string[] { targetBranch.FullName }, true);
             if (initialConflicts.Any())
             {
-                throw new MyTFSConflictExeption(initialConflicts.Count() + " unresolved conflict(s) before starting to merge \"" + whatAreWeMerging +
+                throw new MyTfsConflictException(initialConflicts.Count() + " unresolved conflict(s) before starting to merge \"" + whatAreWeMerging +
                                                 "\"\n\nIn folder " + targetBranch.FullName);
             }
         }
@@ -188,7 +175,7 @@ namespace TFSMergingTool.Merging
         /// Merges a range changesets. Does not perform a check in.
         /// </summary>
         /// <returns>A tuple, where the boolean signals success, and the string contains and error message in case of failure.</returns>
-        public static Tuple<bool, string> MergeRange(MyTFSConnection tfsConnection, IOrderedEnumerable<Changeset> changesets, IList<DirectoryInfo> branches,
+        public static Tuple<bool, string> MergeRange(MyTfsConnection tfsConnection, Changeset[] changesets, IList<DirectoryInfo> branches,
             IProgress<ProgressReportArgs> reporter, CancellationToken cancelToken, FileInfo tfExecutable, IPopupService popupService,
             MergeOptionsEx mergeOptions = MergeOptionsEx.None)
         {
@@ -198,10 +185,10 @@ namespace TFSMergingTool.Merging
             //    Debug.Assert(branches.Count == 2, "Currently not supported to have more than two branches in the chain when not checkin in after each merge.");
             //}
 
-            if (changesets.Count() > 0 && branches.Count > 1)
+            if (changesets.Any() && branches.Count > 1)
             {
-                var sourceBranch = branches[0];
-                var targetBranch = branches[1];
+                DirectoryInfo sourceBranch = branches[0];
+                DirectoryInfo targetBranch = branches[1];
                 tfsConnection.SetLocalPath(BranchType.Source, sourceBranch.FullName);
                 tfsConnection.SetLocalPath(BranchType.Target, targetBranch.FullName);
 
@@ -227,21 +214,20 @@ namespace TFSMergingTool.Merging
                         var conflictRetval = ConflictResolver.ResolveConflictsWithExternalExecutable(tfExecutable, tfsConnection, targetBranch.FullName, popupService);
 
                         if (!conflictRetval.Item1)
-                        {
-                            throw new MyTFSConflictExeption(conflictRetval.Item2.Count() + " unresolved conflicts.");
-                        }
+                            throw new MyTfsConflictException(conflictRetval.Item2.Count() + " unresolved conflicts.");
+
                         cancelToken.ThrowIfCancellationRequested();
                     }
 
                     reporter?.Report(new ProgressReportArgs(1));
                 }
-                catch (MyTFSConnectionException ex)
+                catch (MyTfsConnectionException ex)
                 {
                     reporter?.Report(new ProgressReportArgs(0, "Error", "Error " + whatAreWeDoing + "\n\n" + ex.ToString()));
                     return Tuple.Create(false, ex.ToString());
                 }
 
-                return Tuple.Create(true, "Succesfully merged.");
+                return Tuple.Create(true, "Successfully merged.");
             }
 
             return Tuple.Create(false, "No changesets, or not >= 2 branches.");

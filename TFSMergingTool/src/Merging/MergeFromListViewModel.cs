@@ -1,7 +1,6 @@
 ﻿using Caliburn.Micro;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Text;
@@ -44,12 +43,12 @@ namespace TFSMergingTool.Merging
         IEventAggregator EventAggregator { get; set; }
         IOutputWindow Output { get; set; }
         UserSettings Settings { get; set; }
-        MyTFSConnection TfsConnection { get; set; }
+        MyTfsConnection TfsConnection { get; set; }
         IShell Shell { get; set; }
         IPopupService Popups { get; set; }
 
         [ImportingConstructor]
-        public MergeFromListViewModel(IEventAggregator eventAggregator, IOutputWindow output, UserSettings settings, MyTFSConnection tfsConnection,
+        public MergeFromListViewModel(IEventAggregator eventAggregator, IOutputWindow output, UserSettings settings, MyTfsConnection tfsConnection,
             IPopupService popups)
         {
             EventAggregator = eventAggregator;
@@ -111,21 +110,17 @@ namespace TFSMergingTool.Merging
         {
             get
             {
-                if (BranchList.Count > 1)
+                if (BranchList.Count <= 1) return string.Empty;
+
+                var sb = new StringBuilder();
+                string lastItem = BranchList.Last().Name;
+                for (int ii = 0; ii < BranchList.Count; ii++)
                 {
-                    var sb = new StringBuilder();
-                    string lastItem = BranchList.Last().Name;
-                    for (int ii = 0; ii < BranchList.Count; ii++)
-                    {
-                        sb.Append(BranchList[ii].Name);
-                        if (ii < BranchList.Count - 1)
-                        {
-                            sb.Append(" > ");
-                        }
-                    }
-                    return sb.ToString();
+                    sb.Append(BranchList[ii].Name);
+                    if (ii < BranchList.Count - 1)
+                        sb.Append(" > ");
                 }
-                return string.Empty;
+                return sb.ToString();
             }
         }
 
@@ -156,28 +151,23 @@ namespace TFSMergingTool.Merging
         private bool _getWorkItemData;
         public bool GetWorkItemData
         {
-            get { return _getWorkItemData; }
+            get => _getWorkItemData;
             set
             {
-                if (value != _getWorkItemData)
-                {
-                    _getWorkItemData = value;
-                    NotifyOfPropertyChange(() => GetWorkItemData);
-                }
+                if (value == _getWorkItemData) return;
+                _getWorkItemData = value;
+                NotifyOfPropertyChange(() => GetWorkItemData);
             }
         }
 
-        public int NumCandidates
-        {
-            get { return CandidateList.Count; }
-        }
+        public int NumCandidates => CandidateList.Count;
 
         public int MaxItemCount { get; set; }
 
         private IObservableCollection<CandidateListItem> _candidateList;
         public IObservableCollection<CandidateListItem> CandidateList
         {
-            get { return _candidateList; }
+            get => _candidateList;
             set
             {
                 _candidateList = value;
@@ -190,12 +180,7 @@ namespace TFSMergingTool.Merging
         /// Currently selected changesets, ordered by ChangesetId.
         /// </summary>
         private IOrderedEnumerable<Changeset> SelectedCandidatesById
-        {
-            get
-            {
-                return CandidateList.Where(c => c.IsSelected).Select(c => c.Changeset).OrderBy(cs => cs.ChangesetId);
-            }
-        }
+            => CandidateList.Where(c => c.IsSelected).Select(c => c.Changeset).OrderBy(cs => cs.ChangesetId);
 
         /// <summary>
         /// Makes sure that IsSelected == false for all changesets in CandidateList.
@@ -208,25 +193,23 @@ namespace TFSMergingTool.Merging
             }
         }
 
-        private ICollectionView candidateListView;
+        private ICollectionView _candidateListView;
 
         public ICollectionView CandidateListView
         {
-            get { return this.candidateListView; }
+            get => this._candidateListView;
             set
             {
-                if (value != this.candidateListView)
-                {
-                    this.candidateListView = value;
-                    NotifyOfPropertyChange(() => CandidateListView);
-                }
+                if (value == this._candidateListView) return;
+                this._candidateListView = value;
+                NotifyOfPropertyChange(() => CandidateListView);
             }
         }
 
         public enum ListType
         {
             MergeCandidates,
-            Changesets
+            Changesets,
         }
 
         public void RefreshCandidates()
@@ -252,21 +235,28 @@ namespace TFSMergingTool.Merging
             CandidateList.Clear();
 
             var reporter = Shell.ProgressReporter;
-            var progressMax = BranchList.Count + 1; // update brances, get candidates (populate list will have its own Max)
-            var cancelToken = Shell.InitAndShowProgress(0, 0, progressMax, "Get");
+            int progressMax = BranchList.Count + 1; // update brances, get candidates (populate list will have its own Max)
+            CancellationToken cancelToken = Shell.InitAndShowProgress(0, 0, progressMax, "Get");
 
             try
             {
-                await Task.Run(() => UpdateBranches(TfsConnection, reporter, cancelToken));
-                if (listType == ListType.MergeCandidates)
+                await Task.Run(() => UpdateBranches(TfsConnection, reporter, cancelToken), cancelToken);
+                switch (listType)
                 {
-                    var candidateList = await Task.Run(() => RefreshCandidates(TfsConnection, reporter, cancelToken));
-                    CandidateList.AddRange(candidateList);
-                }
-                else if (listType == ListType.Changesets)
-                {
-                    var candidateList = await Task.Run(() => RefreshChangesets(TfsConnection, reporter, cancelToken));
-                    CandidateList.AddRange(candidateList);
+                    case ListType.MergeCandidates:
+                        {
+                            var candidateList = await Task.Run(() => RefreshCandidates(TfsConnection, reporter, cancelToken), cancelToken);
+                            CandidateList.AddRange(candidateList);
+                            break;
+                        }
+                    case ListType.Changesets:
+                        {
+                            var candidateList = await Task.Run(() => RefreshChangesets(TfsConnection, reporter, cancelToken), cancelToken);
+                            CandidateList.AddRange(candidateList);
+                            break;
+                        }
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(listType), listType, null);
                 }
                 Shell.ProgressIsShown = false;
             }
@@ -283,7 +273,7 @@ namespace TFSMergingTool.Merging
             Refresh();
         }
 
-        public bool UpdateBranches(MyTFSConnection tfsConnection, IProgress<ProgressReportArgs> reporter, CancellationToken cancelToken)
+        public bool UpdateBranches(MyTfsConnection tfsConnection, IProgress<ProgressReportArgs> reporter, CancellationToken cancelToken)
         {
             bool retval = true;
             // 1. Update branches.
@@ -297,23 +287,23 @@ namespace TFSMergingTool.Merging
                 else
                     reporter?.Report(new ProgressReportArgs(1, null, "Updating target #" + ii.ToString() + " branch (" + branch.Name + ")..."));
                 IList<Conflict> getConflicts = tfsConnection.UpdateBranch(branch.FullName);
-                retval = getConflicts.Any() == false;
+                retval = !getConflicts.Any();
             }
             return retval;
         }
 
-        public IEnumerable<CandidateListItem> RefreshCandidates(MyTFSConnection tfsConnection, IProgress<ProgressReportArgs> reporter, CancellationToken cancelToken)
+        public IEnumerable<CandidateListItem> RefreshCandidates(MyTfsConnection tfsConnection, IProgress<ProgressReportArgs> reporter, CancellationToken cancelToken)
         {
             string sourceName = BranchList[0].Name;
             string targetName = BranchList[1].Name;
 
             reporter?.Report(new ProgressReportArgs(0, null, $"Getting merge candidates from {sourceName} to {targetName} (external call)..."));
 
-            IEnumerable<MergeCandidate> candidateList = tfsConnection.GetMergeCandidates();
+            MergeCandidate[] candidateList = tfsConnection.GetMergeCandidates().ToArray();
 
             cancelToken.ThrowIfCancellationRequested();
 
-            int newMaximumValue = candidateList.Count() + 1; // .Count() is a fast operation here
+            int newMaximumValue = candidateList.Length + 1; // .Count() is a fast operation here
             reporter?.Report(new ProgressReportArgs(1, null, "Populating candidate list...", newMaximumValue));
 
             var items = new List<CandidateListItem>();
@@ -328,11 +318,11 @@ namespace TFSMergingTool.Merging
             return items;
         }
 
-        public IEnumerable<CandidateListItem> RefreshChangesets(MyTFSConnection tfsConnection, IProgress<ProgressReportArgs> reporter, CancellationToken cancelToken)
+        public IEnumerable<CandidateListItem> RefreshChangesets(MyTfsConnection tfsConnection, IProgress<ProgressReportArgs> reporter, CancellationToken cancelToken)
         {
             reporter.Report(new ProgressReportArgs(0, null, "Getting change sets (external call)..."));
 
-            var changesetList = tfsConnection.GetHistory(BranchList.First().FullName);
+            IEnumerable<Changeset> changesetList = tfsConnection.GetHistory(BranchList.First().FullName);
 
             cancelToken.ThrowIfCancellationRequested();
 
@@ -369,7 +359,7 @@ namespace TFSMergingTool.Merging
 
         public string FilterText
         {
-            get { return _filterText; }
+            get => _filterText;
             set
             {
                 if (value != _filterText)
@@ -428,25 +418,19 @@ namespace TFSMergingTool.Merging
         /// <returns></returns>
         public bool ShouldCandidateListItemBeShown(object itemObject)
         {
-            Debug.Assert(itemObject is CandidateListItem);
+            if (string.IsNullOrEmpty(FilterText) != false) return true;
 
             var retval = true;
-            if (string.IsNullOrEmpty(FilterText) == false)
+            Debug.Assert(itemObject is CandidateListItem);
+            if (itemObject is CandidateListItem item)
             {
-                if (itemObject is CandidateListItem)
-                {
-                    var item = itemObject as CandidateListItem;
-                    // note: If selected items are not shown, then selecting another item will not select the items not shown!
-                    retval = item.IsSelected || item.Changeset.Comment.IndexOf(FilterText, StringComparison.CurrentCultureIgnoreCase) >= 0;
-                }
+                // note: If selected items are not shown, then selecting another item will not select the items not shown!
+                retval = item.IsSelected || item.Changeset.Comment.IndexOf(FilterText, StringComparison.CurrentCultureIgnoreCase) >= 0;
             }
             return retval;
         }
 
-        public void ClearFilter()
-        {
-            FilterText = string.Empty;
-        }
+        public void ClearFilter() => FilterText = string.Empty;
 
         #endregion
 
@@ -459,7 +443,7 @@ namespace TFSMergingTool.Merging
 
         // TBD: Need a SelectionChanged event or smt from the list.
         //public bool CanMergeIndividually { get { return CandidateList.Any(item => item.IsSelected); } }
-        public bool CanMergeIndividually { get { return true; } }
+        public bool CanMergeIndividually => true;
 
         #endregion
 
@@ -471,7 +455,7 @@ namespace TFSMergingTool.Merging
 
         public bool OptionDiscardIsChecked
         {
-            get { return CurrentOptions.Discard; }
+            get => CurrentOptions.Discard;
             set
             {
                 if (value == CurrentOptions.Discard) return;
@@ -482,7 +466,7 @@ namespace TFSMergingTool.Merging
 
         public bool OptionForceIsChecked
         {
-            get { return CurrentOptions.Force; }
+            get => CurrentOptions.Force;
             set
             {
                 if (value == CurrentOptions.Force) return;
@@ -493,7 +477,7 @@ namespace TFSMergingTool.Merging
 
         public bool OptionBaselessIsChecked
         {
-            get { return CurrentOptions.Baseless; }
+            get => CurrentOptions.Baseless;
             set
             {
                 if (value == CurrentOptions.Baseless) return;
@@ -504,7 +488,7 @@ namespace TFSMergingTool.Merging
 
         public bool OptionUseRangeIsChecked
         {
-            get { return CurrentOptions.UseRange; }
+            get => CurrentOptions.UseRange;
             set
             {
                 if (value == CurrentOptions.UseRange) return;
@@ -517,7 +501,7 @@ namespace TFSMergingTool.Merging
 
         public bool CheckinNoCheckinIsChecked
         {
-            get { return CurrentOptions.CheckinOptions.HasFlag(MyCheckinOptions.NoCheckin); }
+            get => CurrentOptions.CheckinOptions.HasFlag(MyCheckinOptions.NoCheckin);
             set
             {
                 const MyCheckinOptions optionAsEnum = MyCheckinOptions.NoCheckin;
@@ -565,7 +549,8 @@ namespace TFSMergingTool.Merging
 
             if (BranchList.Count != 2)
             {
-                Popups.ShowMessage("Combining multiple changesets in one merge operation is currently only supported for one target branch (merge chain length of 1).",
+                Popups.ShowMessage("Combining multiple changesets in one merge operation is currently " +
+                                   "only supported for one target branch (merge chain length of 1).",
                                     MessageBoxImage.Exclamation);
             }
             else
@@ -579,11 +564,11 @@ namespace TFSMergingTool.Merging
 
         private async void DoMergeOneByOne(MergeOptionsEx mergeOptions, MyCheckinOptions checkinOptions, bool associateWorkItems)
         {
-            var changesets = SelectedCandidatesById;
-            if (changesets.Count() > 0)
+            Changeset[] changesets = SelectedCandidatesById.ToArray();
+            if (changesets.Any())
             {
                 var mergeDepth = BranchList.Count - 1;
-                var numMerges = changesets.Count() * mergeDepth;
+                var numMerges = changesets.Length * mergeDepth;
                 int maxProgress = 2 * numMerges;
 
                 CancellationToken cancelToken = Shell.InitAndShowProgress(0, 0, maxProgress, "Merging, please wait");
@@ -594,10 +579,10 @@ namespace TFSMergingTool.Merging
                 {
                     finishedItems.Add(item);
 
-                    if (CandidateList.Any(cand => cand.Changeset.ChangesetId == item.SourceChangesetId))
+                    if (CandidateList.Any(it => it.Changeset.ChangesetId == item.SourceChangesetId))
                     {
                         // Clean completed items from UI list
-                        var match = CandidateList.First(cand => cand.Changeset.ChangesetId == item.SourceChangesetId);
+                        var match = CandidateList.First(it => it.Changeset.ChangesetId == item.SourceChangesetId);
                         CandidateList.Remove(match);
                     }
                 });
@@ -606,8 +591,8 @@ namespace TFSMergingTool.Merging
                 {
                     const bool doCheckin = true;
                     Tuple<bool, string> mergeResult = await Task.Run(()
-                        => MergingHelper.MergeAndCommitOneByOne(TfsConnection, changesets, BranchList, reporter, finishedProgress, cancelToken, Settings.TfsExecutable, Popups,
-                                                                mergeOptions, doCheckin, associateWorkItems));
+                        => MergingHelper.MergeAndCommitOneByOne(TfsConnection, changesets, BranchList, reporter, finishedProgress,
+                            cancelToken, Settings.TfsExecutable, Popups, mergeOptions, doCheckin, associateWorkItems), cancelToken);
 
                     if (mergeResult.Item1 == true)
                     {
@@ -643,9 +628,8 @@ namespace TFSMergingTool.Merging
 
         private async void DoMergeRange(MergeOptionsEx mergeOptions, MyCheckinOptions checkinOptions, bool associateWorkItems)
         {
-            var changesets = SelectedCandidatesById;
-            int numChangesets = changesets.Count();
-            if (numChangesets > 0)
+            Changeset[] changesets = SelectedCandidatesById.ToArray();
+            if (changesets.Length > 0)
             {
                 bool sequential = CheckIfChangesetIdsAreSequential(changesets);
                 if (!sequential)
@@ -670,7 +654,8 @@ namespace TFSMergingTool.Merging
                 try
                 {
                     Tuple<bool, string> mergeResult = await Task.Run(()
-                        => MergingHelper.MergeRange(TfsConnection, changesets, BranchList, reporter, cancelToken, Settings.TfsExecutable, Popups, mergeOptions));
+                        => MergingHelper.MergeRange(TfsConnection, changesets, BranchList, reporter, cancelToken,
+                            Settings.TfsExecutable, Popups, mergeOptions), cancelToken);
 
                     if (mergeResult.Item1 == true)
                     {
@@ -678,12 +663,10 @@ namespace TFSMergingTool.Merging
                         bool checkinSuccess = false;
                         if (doCheckin)
                         {
-                            var idAndOwnerOfChanges = new List<Tuple<int, string>>();
-                            foreach (var cs in changesets)
-                            {
-                                idAndOwnerOfChanges.Add(Tuple.Create(cs.ChangesetId, cs.OwnerDisplayName));
-                            }
-                            string defaultComment = CommentBuilder.GetCombinedMergeCheckinComment(BranchList[0].Name, BranchList[1].Name, idAndOwnerOfChanges, mergeOptions);
+                            var idAndOwnerOfChanges = changesets.Select(cs => Tuple.Create(cs.ChangesetId, cs.OwnerDisplayName)).ToArray();
+
+                            string defaultComment = CommentBuilder.GetCombinedMergeCheckinComment(
+                                BranchList[0].Name, BranchList[1].Name, idAndOwnerOfChanges, mergeOptions);
 
                             checkinSuccess = CheckInAtTheEndOfMerging(changesets, associateWorkItems, defaultComment);
                         }
@@ -693,7 +676,7 @@ namespace TFSMergingTool.Merging
                             // Clean completed items from UI list
                             foreach (var cs in changesets)
                             {
-                                var match = CandidateList.First(cand => cand.Changeset.ChangesetId == cs.ChangesetId);
+                                var match = CandidateList.First(it => it.Changeset.ChangesetId == cs.ChangesetId);
                                 CandidateList.Remove(match);
                             }
                         }
@@ -704,7 +687,7 @@ namespace TFSMergingTool.Merging
                         }
                         else
                         {
-                            Shell.SetFinalMessage("Merging done.", $"Successfully merged {numChangesets} changesets, and checked in the changes.");
+                            Shell.SetFinalMessage("Merging done.", $"Successfully merged {changesets.Length} changesets, and checked in the changes.");
                         }
                     }
                     else
@@ -727,7 +710,7 @@ namespace TFSMergingTool.Merging
         /// <summary>
         /// Returns true if the given changesets have consecutive ids.
         /// </summary>
-        private bool CheckIfChangesetIdsAreSequential(IOrderedEnumerable<Changeset> changesets)
+        private bool CheckIfChangesetIdsAreSequential(Changeset[] changesets)
         {
             bool sequential = changesets.Zip(changesets.Skip(1), (a, b) => (a.ChangesetId + 1) == b.ChangesetId).All(x => x);
             return sequential;
@@ -736,20 +719,15 @@ namespace TFSMergingTool.Merging
         /// <summary>
         /// Used after merging a range of changeset in one operation.
         /// </summary>
-        private bool CheckInAtTheEndOfMerging(IOrderedEnumerable<Changeset> changesets, bool associateWorkItems, string defaultComment)
+        private bool CheckInAtTheEndOfMerging(Changeset[] changesets, bool associateWorkItems, string defaultComment)
         {
-            var items = new List<FinishedItemReport>();
-            foreach (var cs in changesets)
+            var items = changesets.Select(cs => new FinishedItemReport()
             {
-                var newItem = new FinishedItemReport()
-                {
-                    SourceChangesetId = cs.ChangesetId,
-                    SourceBranchIndex = 0,
-                    CommitChangesetId = -1,
-                    CommitComment = cs.Comment
-                };
-                items.Add(newItem);
-            }
+                SourceChangesetId = cs.ChangesetId,
+                SourceBranchIndex = 0,
+                CommitChangesetId = -1,
+                CommitComment = cs.Comment
+            }).ToArray();
 
             return CheckInAtTheEndOfMerging(items, associateWorkItems, defaultComment);
         }
@@ -766,16 +744,13 @@ namespace TFSMergingTool.Merging
             {
                 foreach (var item in finishedItems)
                 {
-                    if (item.SourceBranchIndex == 0)
+                    if (item.SourceBranchIndex != 0) continue;
+
+                    Changeset cs = TfsConnection.GetChangeset(item.SourceChangesetId);
+                    foreach (var wi in cs.WorkItems)
                     {
-                        Changeset cs = TfsConnection.GetChangeset(item.SourceChangesetId);
-                        foreach (var wi in cs.WorkItems)
-                        {
-                            if (workItemsToAssociate.Contains(wi) == false)
-                            {
-                                workItemsToAssociate.Add(wi);
-                            }
-                        }
+                        if (!workItemsToAssociate.Contains(wi))
+                            workItemsToAssociate.Add(wi);
                     }
                 }
             }
@@ -807,35 +782,38 @@ namespace TFSMergingTool.Merging
 
         public void MenuSelectedToClipboard()
         {
-            var candidates = CandidateList.Where(c => c.IsSelected).OrderBy(cand => cand.Changeset.ChangesetId);
-            if (candidates.Any())
-            {
-                var sb = new StringBuilder();
-                const string separator = " | ";
-                sb.AppendLine("Changeset Id" + separator + "Comment" + separator + "Associated Work Items" + separator + "Main Work Item");
-                foreach (var candidate in candidates)
-                {
-                    Changeset change = candidate.Changeset;
-                    if (change != null)
-                    {
-                        string workItems = WorkItemHelper.WorkItemsToString(change.WorkItems);
-                        sb.Append(change.ChangesetId.ToString() + separator);
-                        sb.Append(change.Comment.Trim() + separator);
-                        if (!string.IsNullOrEmpty(workItems)) sb.Append(workItems + separator);
-                        if (candidate.WiProperties != null)
-                        {
-                            sb.Append(candidate.WiProperties.Id.ToString() + " ");
-                            if (!string.IsNullOrEmpty(candidate.WiProperties.State)) sb.Append(candidate.WiProperties.State + ": ");
-                            if (!string.IsNullOrEmpty(candidate.WiProperties.Title)) sb.Append(candidate.WiProperties.Title + " ");
-                        }
+            CandidateListItem[] candidates = CandidateList
+                .Where(c => c.IsSelected)
+                .OrderBy(it => it.Changeset.ChangesetId)
+                .ToArray();
 
-                        sb.Append(Environment.NewLine);
-                    }
+            if (!candidates.Any()) return;
+
+            var sb = new StringBuilder();
+            const string separator = " | ";
+            sb.AppendLine("Changeset Id" + separator + "Comment" + separator + "Associated Work Items" + separator + "Main Work Item");
+            foreach (var candidate in candidates)
+            {
+                Changeset change = candidate.Changeset;
+                if (change == null) continue;
+
+                string workItems = WorkItemHelper.WorkItemsToString(change.WorkItems);
+                sb.Append(change.ChangesetId.ToString() + separator);
+                sb.Append(change.Comment.Trim() + separator);
+                if (!string.IsNullOrEmpty(workItems)) sb.Append(workItems + separator);
+
+                if (candidate.WiProperties != null)
+                {
+                    sb.Append(candidate.WiProperties.Id.ToString() + " ");
+                    if (!string.IsNullOrEmpty(candidate.WiProperties.State)) sb.Append(candidate.WiProperties.State + ": ");
+                    if (!string.IsNullOrEmpty(candidate.WiProperties.Title)) sb.Append(candidate.WiProperties.Title + " ");
                 }
-                //Popups.ShowMessage(sb.ToString());
-                //System.Diagnostics.Process.Start("http://google.com");
-                System.Windows.Clipboard.SetText(sb.ToString());
+
+                sb.Append(Environment.NewLine);
             }
+            //Popups.ShowMessage(sb.ToString());
+            //System.Diagnostics.Process.Start("http://google.com");
+            System.Windows.Clipboard.SetText(sb.ToString());
         }
 
         public void MenuCommentToClipboard(object source)
@@ -846,55 +824,50 @@ namespace TFSMergingTool.Merging
 
         public void MenuOpenSelectedInBrowser(object source)
         {
-            if (source is CandidateListItem candidate)
+            switch (source)
             {
-                // Opens the selected item in the browser.
-                var wiProperties = candidate.WiProperties;
-                if (wiProperties != null)
-                {
-                    WorkItem wi = wiProperties.WorkItemObject;
-                    if (wi != null)
+                case CandidateListItem candidate:
                     {
-                        WorkItemHelper.OpenWorkItemInBrowser(wi);
-                    }
-                }
-            }
-            else if (source is System.Windows.Input.KeyEventArgs keyArgs)
-            {
-                // Opens all selected items in the browser.
-                if (keyArgs.Key == System.Windows.Input.Key.B && keyArgs.IsDown && System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftCtrl))
-                {
-                    var candidates = CandidateList.Where(c => c.IsSelected).OrderBy(cand => cand.Changeset.ChangesetId);
-                    if (candidates.Any())
-                    {
-                        foreach (var item in candidates)
+                        // Opens the selected item in the browser.
+                        var wiProperties = candidate.WiProperties;
+                        WorkItem wi = wiProperties?.WorkItemObject;
+                        if (wi != null)
                         {
-                            MenuOpenSelectedInBrowser(item);
+                            WorkItemHelper.OpenWorkItemInBrowser(wi);
                         }
+
+                        break;
                     }
-                }
+                case System.Windows.Input.KeyEventArgs keyArgs:
+                    {
+                        // Opens all selected items in the browser.
+                        if (keyArgs.Key == System.Windows.Input.Key.B &&
+                            keyArgs.IsDown &&
+                            System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftCtrl))
+                        {
+                            var candidates = CandidateList.Where(c => c.IsSelected).OrderBy(it => it.Changeset.ChangesetId);
+                            foreach (var item in candidates)
+                                MenuOpenSelectedInBrowser(item);
+                        }
+
+                        break;
+                    }
             }
         }
 
         public void MenuEditWorkItemFields()
         {
-            var candidates = CandidateList.Where(c => c.IsSelected).OrderBy(cand => cand.Changeset.ChangesetId);
-            if (candidates.Any())
+            CandidateListItem[] candidates = CandidateList.Where(c => c.IsSelected).OrderBy(it => it.Changeset.ChangesetId).ToArray();
+            if (!candidates.Any()) return;
+
+            string fieldNameToModify = Popups.AskStringInput("Which Field do you want to modify?", "Planned Release");
+            if (string.IsNullOrEmpty(fieldNameToModify) == false)
             {
-                string fieldNameToModify = Popups.AskStringInput("Which Field do you want to modify?", "Planned Release");
-                if (string.IsNullOrEmpty(fieldNameToModify) == false)
-                {
-                    WorkItem firstWorkItem = candidates.First().WiProperties.WorkItemObject;
-                    Field field = WorkItemHelper.GetFieldIfExists(firstWorkItem, fieldNameToModify);
-                    if (field == null)
-                    {
-                        Popups.ShowMessage($"Could not find Field {fieldNameToModify} on the 1st Work Item ({firstWorkItem.Id})");
-                    }
-                    else
-                    {
-                        Popups.ShowMessage($"Success: field {fieldNameToModify} found!");
-                    }
-                }
+                WorkItem firstWorkItem = candidates.First().WiProperties.WorkItemObject;
+                Field field = WorkItemHelper.GetFieldIfExists(firstWorkItem, fieldNameToModify);
+                Popups.ShowMessage(field == null
+                    ? $"Could not find Field {fieldNameToModify} on the 1st Work Item ({firstWorkItem.Id})"
+                    : $"Success: field {fieldNameToModify} found!");
             }
         }
 
@@ -902,7 +875,7 @@ namespace TFSMergingTool.Merging
 
         public void ShowSelection()
         {
-            var changesets = SelectedCandidatesById;
+            Changeset[] changesets = SelectedCandidatesById.ToArray();
             if (changesets.Any())
             {
                 var sb = new StringBuilder();
@@ -920,7 +893,5 @@ namespace TFSMergingTool.Merging
                 Popups.ShowMessage("No changesets selected.");
             }
         }
-
     }
-
 }

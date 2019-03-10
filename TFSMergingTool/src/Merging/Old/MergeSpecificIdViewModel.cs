@@ -29,13 +29,13 @@ namespace TFSMergingTool.Merging
         IEventAggregator EventAggregator { get; set; }
         IOutputWindow Output { get; set; }
         UserSettings Settings { get; set; }
-        MyTFSConnection TfsConnection { get; set; }
+        MyTfsConnection TfsConnection { get; set; }
         IPopupService Popups { get; set; }
         IShell Shell { get; set; }
 
 
         [ImportingConstructor]
-        public MergeSpecificIdViewModel(IEventAggregator eventAggregator, IOutputWindow output, UserSettings settings, MyTFSConnection tfsConnection,
+        public MergeSpecificIdViewModel(IEventAggregator eventAggregator, IOutputWindow output, UserSettings settings, MyTfsConnection tfsConnection,
             IPopupService popups)
         {
             BranchList = new List<DirectoryInfo>();
@@ -55,7 +55,7 @@ namespace TFSMergingTool.Merging
         private string _changesetDetails;
         public string ChangesetDetails
         {
-            get { return _changesetDetails; }
+            get => _changesetDetails;
             set
             {
                 if (value != _changesetDetails)
@@ -69,7 +69,7 @@ namespace TFSMergingTool.Merging
         private string _id;
         public string Id
         {
-            get { return _id; }
+            get => _id;
             set
             {
                 if (value != _id)

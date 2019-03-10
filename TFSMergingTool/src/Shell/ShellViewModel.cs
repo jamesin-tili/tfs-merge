@@ -46,23 +46,23 @@ namespace TFSMergingTool.Shell
         private IWindowManager WindowManager { get; set; }
         private IOutputWindow Output { get; set; }
         private IEventAggregator EventAggregator { get; set; }
-        private IServerSetupViewModel ServerSetupVM { get; set; }
-        private IMergeFromListViewModel MergeFromListVM { get; set; }
-        private IMergeSpecificIdViewModel MergeSpecificIdVM { get; set; }
+        private IServerSetupViewModel ServerSetupVm { get; set; }
+        private IMergeFromListViewModel MergeFromListVm { get; set; }
+        private IMergeSpecificIdViewModel MergeSpecificIdVm { get; set; }
         private UserSettings Settings { get; set; }
 
         [ImportingConstructor]
         public ShellViewModel(IWindowManager windowManager, IOutputWindow output, IEventAggregator eventAggregator, UserSettings settings,
-            IServerSetupViewModel serverSetupVM, IMergeFromListViewModel mergeFromListVM, IMergeSpecificIdViewModel mergeSpecificIdVM)
+            IServerSetupViewModel serverSetupVm, IMergeFromListViewModel mergeFromListVm, IMergeSpecificIdViewModel mergeSpecificIdVm)
         {
             DisplayName = "TFS Merging Tool";
 
             WindowManager = windowManager;
             Output = output;
             EventAggregator = eventAggregator;
-            ServerSetupVM = serverSetupVM;
-            MergeFromListVM = mergeFromListVM;
-            MergeSpecificIdVM = mergeSpecificIdVM;
+            ServerSetupVm = serverSetupVm;
+            MergeFromListVm = mergeFromListVm;
+            MergeSpecificIdVm = mergeSpecificIdVm;
 
             Settings = settings;
             Settings.SetDefaultValues();
@@ -89,22 +89,19 @@ namespace TFSMergingTool.Shell
         {
             // Close all screens.
             var conductedItems = Items;
-            bool foundItem;
+            bool foundActiveItem;
             do
             {
-                foundItem = false;
-                var activeItem = (from item in conductedItems
-                                  where item.IsActive
-                                  select item).FirstOrDefault();
+                var activeItem = conductedItems.FirstOrDefault(item => item.IsActive);
                 if (activeItem != null)
                 {
-                    DeactivateItem(activeItem, true);
-                    foundItem = false;
+                    DeactivateItem(activeItem, close: true);
+                    foundActiveItem = true;
                 }
-            } while (foundItem);
+                else foundActiveItem = false;
+            } while (foundActiveItem);
 
-            bool outputShown = Output.IsShown;
-            if (outputShown)
+            if (Output.IsShown)
                 Output.Hide();
         }
 
@@ -115,15 +112,15 @@ namespace TFSMergingTool.Shell
             switch (newMode)
             {
                 case MainMode.ConnectionSetup:
-                    ActivateItem(ServerSetupVM);
+                    ActivateItem(ServerSetupVm);
                     break;
                 case MainMode.MergeFromList:
-                    MergeFromListVM.BranchList = branchPaths;
-                    ActivateItem(MergeFromListVM);
+                    MergeFromListVm.BranchList = branchPaths;
+                    ActivateItem(MergeFromListVm);
                     break;
                 case MainMode.MergeSpecificId:
-                    MergeSpecificIdVM.BranchList = branchPaths;
-                    ActivateItem(MergeSpecificIdVM);
+                    MergeSpecificIdVm.BranchList = branchPaths;
+                    ActivateItem(MergeSpecificIdVm);
                     break;
             }
         }
@@ -131,15 +128,10 @@ namespace TFSMergingTool.Shell
         public void ToggleOutputWindow()
         {
             ProgressVisibility = Visibility.Visible;
-            bool isShown = Output.IsShown;
-            if (!isShown)
-            {
+            if (!Output.IsShown)
                 Output.Show();
-            }
             else
-            {
                 Output.Hide();
-            }
         }
 
         public void Handle(ChangeMainModeEvent message)
@@ -153,129 +145,94 @@ namespace TFSMergingTool.Shell
         private readonly string _PROGRESS_BUTTON_TEXT_CANCELING = "Canceling...";
         private readonly string _PROGRESS_BUTTON_TEXT_CLOSE = "Ok";
 
-        public bool _progressIsShown = false;
+        private bool _progressIsShown = false;
         public bool ProgressIsShown
         {
-            get
-            {
-                return _progressIsShown;
-            }
+            get => _progressIsShown;
             set
             {
-                if (value != _progressIsShown)
+                if (value == _progressIsShown) return;
+                _progressIsShown = value;
+                ProgressVisibility = _progressIsShown ? Visibility.Visible : Visibility.Hidden;
+                if (_progressIsShown)
                 {
-                    _progressIsShown = value;
-                    ProgressVisibility = _progressIsShown ? Visibility.Visible : Visibility.Hidden;
-                    if (_progressIsShown == true)
-                    {
-                        ProgressStopButtonText = _PROGRESS_BUTTON_TEXT_CANCEL;
-                        _busyCursorWasSetWhenCanceling = false;
-                    }
-                    NotifyOfPropertyChange(() => ProgressIsShown);
-                    NotifyOfPropertyChange(() => ProgressVisibility);
+                    ProgressStopButtonText = _PROGRESS_BUTTON_TEXT_CANCEL;
+                    _busyCursorWasSetWhenCanceling = false;
                 }
+                NotifyOfPropertyChange(() => ProgressIsShown);
+                NotifyOfPropertyChange(() => ProgressVisibility);
             }
         }
 
-        public double _progressMinimum;
+        private double _progressMinimum;
         public double ProgressMinimum
         {
-            get
-            {
-                return _progressMinimum;
-            }
+            get => _progressMinimum;
             set
             {
-                if (value != _progressMinimum)
-                {
-                    _progressMinimum = value;
-                    NotifyOfPropertyChange(() => ProgressMinimum);
-                }
+                if (Math.Abs(value - _progressMinimum) < 1e-5) return;
+                _progressMinimum = value;
+                NotifyOfPropertyChange(() => ProgressMinimum);
             }
         }
 
-        public double _progressMaximum;
+        private double _progressMaximum;
         public double ProgressMaximum
         {
-            get
-            {
-                return _progressMaximum;
-            }
+            get => _progressMaximum;
             set
             {
-                if (value != _progressMaximum)
-                {
-                    _progressMaximum = value;
-                    NotifyOfPropertyChange(() => ProgressMaximum);
-                }
+                if (!(Math.Abs(value - _progressMaximum) > 1e-5)) return;
+                _progressMaximum = value;
+                NotifyOfPropertyChange(() => ProgressMaximum);
             }
         }
 
-        public double _progressValue;
+        private double _progressValue;
         public double ProgressValue
         {
-            get
-            {
-                return _progressValue;
-            }
+            get => _progressValue;
             set
             {
-                if (value != _progressValue)
-                {
-                    _progressValue = value;
-                    NotifyOfPropertyChange(() => ProgressValue);
-                }
+                if (Math.Abs(value - _progressValue) < 1e-5) return;
+                _progressValue = value;
+                NotifyOfPropertyChange(() => ProgressValue);
             }
         }
 
-        public string _progressTitle;
+        private string _progressTitle;
         public string ProgressTitle
         {
-            get
-            {
-                return _progressTitle;
-            }
+            get => _progressTitle;
             set
             {
-                if (value != _progressTitle)
-                {
-                    _progressTitle = value;
-                    NotifyOfPropertyChange(() => ProgressTitle);
-                }
+                if (value == _progressTitle) return;
+                _progressTitle = value;
+                NotifyOfPropertyChange(() => ProgressTitle);
             }
         }
 
-        public string _progressState;
+        private string _progressState;
         public string ProgressState
         {
-            get
-            {
-                return _progressState;
-            }
+            get => _progressState;
             set
             {
-                if (value != _progressState)
-                {
-                    _progressState = value;
-                    NotifyOfPropertyChange(() => ProgressState);
-                }
+                if (value == _progressState) return;
+                _progressState = value;
+                NotifyOfPropertyChange(() => ProgressState);
             }
         }
 
-        public CancellationTokenSource _progressCancelTokenSource;
+        private CancellationTokenSource _progressCancelTokenSource;
         public CancellationTokenSource ProgressCancelTokenSource
         {
-            get
-            {
-                return _progressCancelTokenSource;
-            }
+            get => _progressCancelTokenSource;
             set
             {
-                if (value != _progressCancelTokenSource)
-                {
-                    _progressCancelTokenSource = value;
-                    NotifyOfPropertyChange(() => ProgressCancelTokenSource);
-                }
+                if (value == _progressCancelTokenSource) return;
+                _progressCancelTokenSource = value;
+                NotifyOfPropertyChange(() => ProgressCancelTokenSource);
             }
         }
 
@@ -287,7 +244,7 @@ namespace TFSMergingTool.Shell
             if (args.NewMaximumValue > 0) ProgressMaximum = args.NewMaximumValue;
         }
 
-        public IProgress<ProgressReportArgs> ProgressReporter { get; private set; }
+        public IProgress<ProgressReportArgs> ProgressReporter { get; }
 
         public void ProgressCancelOperation()
         {
@@ -322,11 +279,9 @@ namespace TFSMergingTool.Shell
 
         private void StopIndicatingCancelIsInProgress()
         {
-            if (_busyCursorWasSetWhenCanceling)
-            {
-                _busyCursorWasSetWhenCanceling = false;
-                SetMouseBusyCursor(false);
-            }
+            if (!_busyCursorWasSetWhenCanceling) return;
+            _busyCursorWasSetWhenCanceling = false;
+            SetMouseBusyCursor(false);
         }
 
         private void SetMouseBusyCursor(bool isBusy)
@@ -340,14 +295,12 @@ namespace TFSMergingTool.Shell
 
         public void SetFinalMessage(string title = null, string state = null, bool setValueToMax = true)
         {
-            if (ProgressIsShown)
-            {
-                if (!string.IsNullOrEmpty(title)) ProgressTitle = title;
-                if (!string.IsNullOrEmpty(state)) ProgressState = state;
-                ProgressStopButtonText = _PROGRESS_BUTTON_TEXT_CLOSE;
-                if (setValueToMax) ProgressValue = ProgressMaximum;
-                StopIndicatingCancelIsInProgress();
-            }
+            if (!ProgressIsShown) return;
+            if (!string.IsNullOrEmpty(title)) ProgressTitle = title;
+            if (!string.IsNullOrEmpty(state)) ProgressState = state;
+            ProgressStopButtonText = _PROGRESS_BUTTON_TEXT_CLOSE;
+            if (setValueToMax) ProgressValue = ProgressMaximum;
+            StopIndicatingCancelIsInProgress();
         }
 
         public CancellationToken InitAndShowProgress(double value, double min, double max, string title, string state = "")
@@ -373,20 +326,15 @@ namespace TFSMergingTool.Shell
         /// </summary>
         public Visibility ProgressVisibility { get; private set; }
 
-        public string _progressStopButtonText;
+        private string _progressStopButtonText;
         public string ProgressStopButtonText
         {
-            get
-            {
-                return _progressStopButtonText;
-            }
+            get => _progressStopButtonText;
             set
             {
-                if (value != _progressStopButtonText)
-                {
-                    _progressStopButtonText = value;
-                    NotifyOfPropertyChange(() => ProgressStopButtonText);
-                }
+                if (value == _progressStopButtonText) return;
+                _progressStopButtonText = value;
+                NotifyOfPropertyChange(() => ProgressStopButtonText);
             }
         }
 

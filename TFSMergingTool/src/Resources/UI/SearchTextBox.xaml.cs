@@ -36,14 +36,14 @@ namespace TFSMergingTool.src.Resources.UI
 
         public string Watermark
         {
-            get { return (string)GetValue(WatermarkProperty); }
-            set { SetValue(WatermarkProperty, value); }
+            get => (string)GetValue(WatermarkProperty);
+            set => SetValue(WatermarkProperty, value);
         }
 
         public string Text
         {
-            get { return (string)GetValue(TextProperty); }
-            set { SetValue(TextProperty, value); }
+            get => (string)GetValue(TextProperty);
+            set => SetValue(TextProperty, value);
         }
 
         #endregion

@@ -13,12 +13,10 @@ namespace TFSMergingTool.Merging
         /// <summary>
         /// Build a comment for checkin for a single change set. Tries to remove any previously generated comments from the given comment string.
         /// </summary>
-        public static string GetComment(string originalComment, int changesetId, string owner, string sourceBranch, string targetBranch, MergeOptionsEx mergeOptions = MergeOptionsEx.None)
+        public static string GetComment(string originalComment, int changesetId, string owner, string sourceBranch,
+            string targetBranch, MergeOptionsEx mergeOptions = MergeOptionsEx.None)
         {
-            string retval;
-
-            string originalOwner;
-            string commentPart = TryToRemoveOldPrefix(originalComment, out originalOwner);
+            string commentPart = TryToRemoveOldPrefix(originalComment, out string originalOwner);
 
             string ownerShort = !string.IsNullOrEmpty(originalOwner) ?
                 ShortenOwnerName(originalOwner) :
@@ -27,50 +25,38 @@ namespace TFSMergingTool.Merging
             string optionsPrefix = GetOptionsString(mergeOptions);
             if (!string.IsNullOrEmpty(optionsPrefix)) optionsPrefix = optionsPrefix + ", ";
 
-            retval = string.Format(optionsPrefix + "{0} {1} > {2}, {3}: {4}", sourceBranch, changesetId, targetBranch, ownerShort, commentPart);
-
+            var retval = string.Format(optionsPrefix + "{0} {1} > {2}, {3}: {4}", 
+                sourceBranch, changesetId, targetBranch, ownerShort, commentPart);
             return retval;
         }
 
         /// <summary>
         /// Build a comment for checkin for a range of change sets.
         /// </summary>
-        public static string GetCombinedMergeCheckinComment(string sourceBranch, string targetBranch, IEnumerable<Tuple<int, string>> idAndOwnerOfChanges, MergeOptionsEx mergeOptions)
+        public static string GetCombinedMergeCheckinComment(string sourceBranch, string targetBranch,
+            ICollection<Tuple<int, string>> idAndOwnerOfChanges, MergeOptionsEx mergeOptions)
         {
             int firstChangeset = idAndOwnerOfChanges.Min(ch => ch.Item1);
             int lastChangeset = idAndOwnerOfChanges.Max(ch => ch.Item1);
-            var owners = idAndOwnerOfChanges.Select(cs => cs.Item2).Distinct();
+            var owners = idAndOwnerOfChanges.Select(cs => cs.Item2).Distinct().ToArray();
 
-            string ownerStr;
-            int ownerCount = owners.Count();
-            if (ownerCount == 1)
-            {
-                ownerStr = ShortenOwnerName(owners.First());
-            }
-            //else if (ownerCount < 3)
-            //{
-            //    var shortOwners = ShortenOwnerNames(owners.ToList());
-            //    ownerStr = string.Join(", ", shortOwners);
-            //}
-            else
-            {
-                ownerStr = ownerCount.ToString() + " authors";
-            }
+            string ownerStr = owners.Length == 1
+                ? ShortenOwnerName(owners.First())
+                : $"{owners.Length} authors";
 
             string optionsPrefix = GetOptionsString(mergeOptions);
-            if (!string.IsNullOrEmpty(optionsPrefix)) optionsPrefix = optionsPrefix + ", ";
+            if (!string.IsNullOrEmpty(optionsPrefix))
+                optionsPrefix += ", ";
 
             string branchStr = $"{sourceBranch} {firstChangeset}-{lastChangeset} > {targetBranch}";
-
             string comment = optionsPrefix + branchStr + ", " + ownerStr + ": ";
+
             if (mergeOptions.HasFlag(MergeOptionsEx.AlwaysAcceptMine))
             {
                 var popups = Caliburn.Micro.IoC.Get<IPopupService>();
                 var answer = popups.AskYesNoQuestion("Is this a \"Cleaning history\" case?");
                 if (answer == System.Windows.MessageBoxResult.Yes)
-                {
                     comment = $"Cleaning merge history ({comment})";
-                }
             }
 
             return comment;
@@ -90,7 +76,7 @@ namespace TFSMergingTool.Merging
         const string RX_RANGE = RX_BEGIN + RX_BRANCH + " " + RX_ID_RANGE + " > " + RX_BRANCH + ", " + RX_OWNER + ": ";
         const string RX_RANGE_MANY = RX_BEGIN + RX_BRANCH + " " + RX_ID_RANGE + " > " + RX_BRANCH + ", " + RX_OWNER_MANY + ": ";
 
-        private static List<string> _prefixPatterns = new List<string>()
+        private static readonly List<string> _prefixPatterns = new List<string>()
         {
             RX_SINGLE_CHANGESET,
             RX_OPTION + " " + RX_SINGLE_CHANGESET,
@@ -110,25 +96,22 @@ namespace TFSMergingTool.Merging
             var regExOptions = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
 
             var oldPrefixFound = false;
-            var currentPattern = 0;
             foreach (var pattern in _prefixPatterns)
             {
                 string[] match = System.Text.RegularExpressions.Regex.Split(comment, pattern, regExOptions);
-                if (match.Length > 1 && String.IsNullOrEmpty(match[0]))
+                if (match.Length > 1 && string.IsNullOrEmpty(match[0]))
                 {
                     // Select the original comment.
                     int matches = match.Count();
                     if (matches > 1)
-                    {
                         originalOwner = match[matches - 2];
-                    }
+
                     retval = match.Last();
                     oldPrefixFound = true;
                     break;
                 }
-                currentPattern++;
             }
-            if (oldPrefixFound == false) retval = comment;
+            if (!oldPrefixFound) retval = comment;
 
             return retval;
         }

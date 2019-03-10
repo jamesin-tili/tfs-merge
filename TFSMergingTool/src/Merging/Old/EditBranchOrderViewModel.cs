@@ -29,7 +29,7 @@ namespace TFSMergingTool.Merging
         private IObservableCollection<BranchlistItem> _branches;
         public IObservableCollection<BranchlistItem> Branches
         {
-            get { return _branches; }
+            get => _branches;
             set
             {
                 if (value != _branches)
@@ -43,7 +43,7 @@ namespace TFSMergingTool.Merging
         private BranchlistItem _selectedBranches;
         public BranchlistItem SelectedBranches
         {
-            get { return _selectedBranches; }
+            get => _selectedBranches;
             set
             {
                 if (value != _selectedBranches)

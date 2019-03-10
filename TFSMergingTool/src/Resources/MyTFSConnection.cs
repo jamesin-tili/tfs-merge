@@ -6,30 +6,27 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.TeamFoundation.VersionControl.Client;
 using Microsoft.TeamFoundation.VersionControl.Common;
 using Microsoft.TeamFoundation.Framework.Common;
 using System.IO;
 using System.ComponentModel.Composition;
-using TFSMergingTool.Resources;
 using System.Windows;
 using TFSMergingTool.OutputWindow;
 
 namespace TFSMergingTool.Resources
 {
-    class MyTFSConnectionException : Exception
+    internal class MyTfsConnectionException : Exception
     {
-        public MyTFSConnectionException(string message)
+        public MyTfsConnectionException(string message)
             : base(message)
         {
         }
     }
 
-    class MyTFSConflictExeption : MyTFSConnectionException
+    internal class MyTfsConflictException : MyTfsConnectionException
     {
-        public MyTFSConflictExeption(string message)
+        public MyTfsConflictException(string message)
             : base(message)
         {
         }
@@ -53,7 +50,7 @@ namespace TFSMergingTool.Resources
     {
         public string Name { get; set; }
         public Uri Uri { get; set; }
-        public List<string> TeamProjectNames { get; set; }
+        public string[] TeamProjectNames { get; set; }
     }
 
     internal struct BranchPaths
@@ -67,9 +64,9 @@ namespace TFSMergingTool.Resources
         }
     }
 
-    [Export(typeof(MyTFSConnection))]
+    [Export(typeof(MyTfsConnection))]
     [PartCreationPolicy(CreationPolicy.Shared)]
-    public class MyTFSConnection
+    public class MyTfsConnection
     {
         public bool IsConnected { get; private set; }
         public Workspace WorkSpace { get; set; }
@@ -80,7 +77,7 @@ namespace TFSMergingTool.Resources
         private TfsTeamProjectCollection _projectCollection;
         private WorkItemStore _workItemStore;
         private VersionControlServer _versionControlServer;
-        private Dictionary<BranchType, BranchPaths> _branchMap;
+        private readonly Dictionary<BranchType, BranchPaths> _branchMap;
 
         public event ConflictEventHandler Conflict
         {
@@ -112,10 +109,10 @@ namespace TFSMergingTool.Resources
             }
         }
 
-        private IPopupService Popups { get; set; }
+        private IPopupService Popups { get; }
 
         [ImportingConstructor]
-        public MyTFSConnection(IPopupService popUpService, IOutputWindow outputWnd)
+        public MyTfsConnection(IPopupService popUpService, IOutputWindow outputWnd)
         {
             Popups = popUpService;
             Output = outputWnd;
@@ -129,15 +126,15 @@ namespace TFSMergingTool.Resources
             };
         }
 
-        ~MyTFSConnection()
+        ~MyTfsConnection()
         {
             Disconnect();
         }
 
         public void Disconnect()
         {
-            if (_projectCollection != null) _projectCollection.Dispose();
-            if (_configurationServer != null) _configurationServer.Dispose();
+            _projectCollection?.Dispose();
+            _configurationServer?.Dispose();
             ClearBranchPaths();
             IsConnected = false;
         }
@@ -192,11 +189,7 @@ namespace TFSMergingTool.Resources
                         false, CatalogQueryOptions.None);
 
                     // List the team projects in the collection
-                    var teamProjectNames = new List<string>();
-                    foreach (CatalogNode projectNode in projectNodes)
-                    {
-                        teamProjectNames.Add(projectNode.Resource.DisplayName);
-                    }
+                    string[] teamProjectNames = projectNodes.Select(it => it.Resource.DisplayName).ToArray();
 
                     teamProjectCollections.Add(new TeamProjectCollectionData()
                     {
@@ -224,20 +217,16 @@ namespace TFSMergingTool.Resources
         {
             try
             {
-                if (userName != string.Empty)
-                {
-                    _projectCollection = new TfsTeamProjectCollection(collectionUri, new System.Net.NetworkCredential(userName, password));
-                }
-                else
-                {
-                    _projectCollection = new TfsTeamProjectCollection(collectionUri);
-                }
+                _projectCollection = userName != string.Empty
+                    ? new TfsTeamProjectCollection(collectionUri, new System.Net.NetworkCredential(userName, password))
+                    : new TfsTeamProjectCollection(collectionUri);
+
                 _workItemStore = _projectCollection.GetService<WorkItemStore>();
                 _versionControlServer = _projectCollection.GetService<VersionControlServer>();
             }
             catch (Microsoft.TeamFoundation.TeamFoundationServiceUnavailableException ex)
             {
-                Popups.ShowMessage("Exception when connecting to team project: " + ex.ToString(), MessageBoxImage.Error);
+                Popups.ShowMessage("Exception when connecting to team project: " + ex, MessageBoxImage.Error);
                 return ConnectionState.UnknownError;
             }
             return ConnectionState.Connected;
@@ -292,6 +281,7 @@ namespace TFSMergingTool.Resources
         {
             if (IsConnected == false) throw new InvalidOperationException("Cannot get folders before connecting to server");
             if (WorkSpace == null) throw new InvalidOperationException("Cannot get folders before setting a workspace");
+
             if (!WorkSpace.IsLocalPathMapped(localPath))
             {
                 return string.Empty;
@@ -311,15 +301,15 @@ namespace TFSMergingTool.Resources
         {
             if (branch == BranchType.All)
             {
-                throw new MyTFSConnectionException("Cannot set a local directory for BranchType.All");
+                throw new MyTfsConnectionException("Cannot set a local directory for BranchType.All");
             }
             if (!Directory.Exists(localPath))
             {
-                throw new MyTFSConnectionException("Local directory does not exist: " + localPath);
+                throw new MyTfsConnectionException("Local directory does not exist: " + localPath);
             }
             if (!WorkSpace.IsLocalPathMapped(localPath))
             {
-                throw new MyTFSConnectionException("Local directory " + localPath + " is not mapped in the TFS workspace");
+                throw new MyTfsConnectionException("Local directory " + localPath + " is not mapped in the TFS workspace");
             }
 
             string serverPath = WorkSpace.GetServerItemForLocalItem(localPath);
@@ -328,10 +318,10 @@ namespace TFSMergingTool.Resources
             string localPathFromWorkspace = WorkSpace.GetLocalItemForServerItem(serverPath);
             if (localPathFromWorkspace != localPath)
             {
-                string message = string.Format("When trying to set {0}:\n", branch.ToString());
+                string message = $"When trying to set {branch.ToString()}:\n";
                 message += string.Format("Inconsistent local and server items: local {0}, server {1}, local matching server {2}.",
                     localPath, serverPath, localPathFromWorkspace);
-                throw new MyTFSConnectionException(message);
+                throw new MyTfsConnectionException(message);
             }
 
             _branchMap[branch] = new BranchPaths(localPath, serverPath);
@@ -339,10 +329,10 @@ namespace TFSMergingTool.Resources
 
         public string GetLocalPath(BranchType branch)
         {
-            if (branch == BranchType.All) throw new MyTFSConnectionException("Cannot get the local directory of BranchType.All");
+            if (branch == BranchType.All) throw new MyTfsConnectionException("Cannot get the local directory of BranchType.All");
             var paths = _branchMap[branch];
 
-            if (paths.Local.IsNullOrEmpty()) throw new MyTFSConnectionException("Trying to get a local directory before it has been set");
+            if (paths.Local.IsNullOrEmpty()) throw new MyTfsConnectionException("Trying to get a local directory before it has been set");
             return paths.Local;
         }
 
@@ -352,28 +342,26 @@ namespace TFSMergingTool.Resources
             var keys = _branchMap.Keys;
             foreach (BranchType key in keys)
             {
-                if (key != BranchType.All)
-                {
-                    Output.WriteLine("  {0}:", key.ToString());
+                if (key == BranchType.All) continue;
 
-                    var paths = _branchMap[key];
+                Output.WriteLine("  {0}:", key.ToString());
 
-                    Output.WriteLine("    Local: " + paths.Local + " <==> Server: " + paths.Server);
-                }
+                var paths = _branchMap[key];
+                Output.WriteLine("    Local: " + paths.Local + " <==> Server: " + paths.Server);
             }
             Output.WriteLine();
         }
 
         public void UpdateBranch(BranchType Branch)
         {
-            if (!_branchMap.ContainsKey(Branch)) throw new MyTFSConnectionException("Invalid branch: " + Branch.ToString());
+            if (!_branchMap.ContainsKey(Branch)) throw new MyTfsConnectionException("Invalid branch: " + Branch);
 
             List<BranchType> branches = BranchToList(Branch);
             foreach (var branch in branches)
             {
                 try
                 {
-                    String localPath = _branchMap[branch].Local;
+                    string localPath = _branchMap[branch].Local;
                     var itemSpec = new ItemSpec(localPath, RecursionType.Full);
                     var getRequest = new GetRequest(itemSpec, VersionSpec.Latest);
                     Output.WriteLine("\nUpdating {0} branch...", branch.ToString());
@@ -385,7 +373,7 @@ namespace TFSMergingTool.Resources
                 }
                 catch (Exception ex)
                 {
-                    throw new MyTFSConnectionException("Exception on Get():\n" + ex.ToString());
+                    throw new MyTfsConnectionException("Exception on Get():\n" + ex.ToString());
                 }
             }
         }
@@ -400,18 +388,16 @@ namespace TFSMergingTool.Resources
             GetStatus getStatus = WorkSpace.Get(getRequest, getOptions);
 
             if (getStatus.NumFailures > 0)
-                throw new MyTFSConnectionException(getStatus.NumFailures + " failures when Getting " + localPath);
+                throw new MyTfsConnectionException(getStatus.NumFailures + " failures when Getting " + localPath);
 
             return GetConflicts(localPath, getStatus);
         }
 
-        private IList<Conflict> GetConflicts(string localOrServerPath, GetStatus getStatus)
+        private Conflict[] GetConflicts(string localOrServerPath, GetStatus getStatus)
         {
-            List<Conflict> conflicts;
-            if (getStatus.NumConflicts > 0)
-                conflicts = WorkSpace.QueryConflicts(new string[] { localOrServerPath }, true).ToList();
-            else
-                conflicts = new List<Conflict>();
+            Conflict[] conflicts = getStatus.NumConflicts > 0
+                ? WorkSpace.QueryConflicts(new[] { localOrServerPath }, true).ToArray()
+                : new Conflict[] { };
             return conflicts;
         }
 
@@ -426,10 +412,10 @@ namespace TFSMergingTool.Resources
 
         private void CheckPathsDefined()
         {
-            if (String.IsNullOrEmpty(_branchMap[BranchType.Source].Local)
-                && String.IsNullOrEmpty(_branchMap[BranchType.Target].Local))
+            if (string.IsNullOrEmpty(_branchMap[BranchType.Source].Local) &&
+                string.IsNullOrEmpty(_branchMap[BranchType.Target].Local))
             {
-                throw new MyTFSConnectionException("Need to set Source and target branches before performing operations on them");
+                throw new MyTfsConnectionException("Need to set Source and target branches before performing operations on them");
             }
         }
 
@@ -440,10 +426,12 @@ namespace TFSMergingTool.Resources
             string sourcePath = _branchMap[BranchType.Source].Local;
             string targetPath = _branchMap[BranchType.Target].Local;
 
-            ChangesetVersionSpec versionFrom = new ChangesetVersionSpec(changesetFrom);
-            ChangesetVersionSpec versionTo = new ChangesetVersionSpec(changesetTo);
+            var versionFrom = new ChangesetVersionSpec(changesetFrom);
+            var versionTo = new ChangesetVersionSpec(changesetTo);
 
-            GetStatus status = WorkSpace.Merge(sourcePath, targetPath, versionFrom, versionTo, LockLevel.Unchanged, RecursionType.Full, mergeOptions);
+            GetStatus status = WorkSpace.Merge(sourcePath, targetPath, versionFrom, versionTo, LockLevel.Unchanged,
+                RecursionType.Full, mergeOptions);
+
             if (status.NoActionNeeded && status.NumOperations == 0)
                 Popups.ShowMessage("No changes found when merging cs " + versionFrom.ToString() + "-" + versionTo.ToString() + ".", MessageBoxImage.Asterisk);
 
@@ -458,31 +446,29 @@ namespace TFSMergingTool.Resources
             return GetConflicts(targetPath, status);
         }
 
-        public int Checkin(String comment, WorkItem[] workItems)
+        public int Checkin(string comment, WorkItem[] workItems)
         {
             CheckPathsDefined();
 
-            var wiCheckinInfos = new List<WorkItemCheckinInfo>();
-            foreach (var workItem in workItems)
-                wiCheckinInfos.Add(new WorkItemCheckinInfo(workItem, WorkItemCheckinAction.Associate));
+            WorkItemCheckinInfo[] wiCheckinInfos = workItems.Select(it =>
+                new WorkItemCheckinInfo(it, WorkItemCheckinAction.Associate)).ToArray();
 
             PendingChange[] pendingChanges = GetPendingChanges();
 
             Output.WriteLine("Checking in {0} pending changes...", pendingChanges.Count());
 
-            if (pendingChanges.Count() == 0)
-                throw new MyTFSConnectionException("There were no changes to merge (trying to check in zero pending changes)");
+            if (!pendingChanges.Any())
+                throw new MyTfsConnectionException("There were no changes to merge (trying to check in zero pending changes)");
 
-            int checkinId = WorkSpace.CheckIn(pendingChanges, comment, null, wiCheckinInfos.ToArray(), new PolicyOverrideInfo(String.Empty, null));
+            int checkinId = WorkSpace.CheckIn(pendingChanges, comment, null, wiCheckinInfos.ToArray(),
+                new PolicyOverrideInfo(overrideComment: string.Empty, policyFailures: null));
 
             Output.WriteLine($"Checkin complete; checkin ID {checkinId}\n");
             return checkinId;
         }
 
-        public PendingChange[] GetPendingChanges()
-        {
-            return WorkSpace.GetPendingChanges(_branchMap[BranchType.Target].Local, RecursionType.Full);
-        }
+        public PendingChange[] GetPendingChanges() 
+            => WorkSpace.GetPendingChanges(_branchMap[BranchType.Target].Local, RecursionType.Full);
 
         public void PrintPendingChanges()
         {
@@ -504,13 +490,13 @@ namespace TFSMergingTool.Resources
             try
             {
                 var serverPath = WorkSpace.GetServerItemForLocalItem(localPath);
-                ItemSpec itemSpec = new ItemSpec(serverPath, RecursionType.Full);
+                var itemSpec = new ItemSpec(serverPath, RecursionType.Full);
                 var changesets = _versionControlServer.QueryHistory(itemSpec);
                 return changesets;
             }
             catch (Exception ex)
             {
-                throw new MyTFSConnectionException("Exception when getting history :\n" + ex.ToString());
+                throw new MyTfsConnectionException("Exception when getting history :\n" + ex.ToString());
             }
         }
 
@@ -523,8 +509,8 @@ namespace TFSMergingTool.Resources
             string targetPath = _branchMap[BranchType.Target].Server;
             Output.WriteLine("Getting merge candidates\n  from: {0}\n  to: {1}\n  ...", sourcePath, targetPath);
 
-            MergeOptionsEx options = MergeOptionsEx.None;
-            ItemSpec sourceItem = new ItemSpec(sourcePath, RecursionType.Full);
+            var options = MergeOptionsEx.None;
+            var sourceItem = new ItemSpec(sourcePath, RecursionType.Full);
             try
             {
                 var mergeCandidates = _versionControlServer.GetMergeCandidates(sourceItem, targetPath, options).ToList();
@@ -535,49 +521,48 @@ namespace TFSMergingTool.Resources
             }
             catch (Exception ex)
             {
-                throw new MyTFSConnectionException("Exception when getting merge candidates:\n" + ex.ToString());
+                throw new MyTfsConnectionException("Exception when getting merge candidates:\n" + ex.ToString());
             }
         }
 
         public void PrintMergeCandidateList(List<MergeCandidate> candidates)
         {
-            if (candidates.Count > 0)
+            if (candidates.Count <= 0) return;
+
+            const int idLength = 7;
+            const int dateLength = 10;
+            const int nameLength = 16;
+            const int commentLength = 50;
+
+            string header1 = "ID".PadRight(idLength);
+            string header2 = "DATE".PadRight(dateLength);
+            string header3 = "COMMITTER".PadRight(nameLength);
+            string header4 = "COMMENT".PadRight(commentLength);
+
+            string header = " " + header1 + " | " + header2 + " | " + header3 + " | " + header4;
+            Output.WriteLine(header);
+
+            // Need to print in reverse order, so that the 1st to be merged shows as the lowest on the screen
+            for (int ii = candidates.Count() - 1; ii >= 0; ii--)
             {
-                int idLength = 7;
-                int dateLength = 10;
-                int nameLength = 16;
-                int commentLength = 50;
+                MergeCandidate candidate = candidates[ii];
+                Changeset changeset = candidate.Changeset;
 
-                string header1 = "ID".PadRight(idLength);
-                string header2 = "DATE".PadRight(dateLength);
-                string header3 = "COMMITTER".PadRight(nameLength);
-                string header4 = "COMMENT".PadRight(commentLength);
+                //string id = changeset.ChangesetId.ToString().Trim().PadRight(idLength);
+                string idPartialChar = candidate.Partial ? "*" : string.Empty;
+                string id = (idPartialChar + changeset.ChangesetId.ToString("D")).PadLeft(idLength);
+                string date = changeset.CreationDate.ToShortDateString().PadLeft(dateLength);
 
-                string header = " " + header1 + " | " + header2 + " | " + header3 + " | " + header4;
-                Output.WriteLine(header);
+                string name = changeset.OwnerDisplayName ?? "";
+                if (name.Length > nameLength) name = name.Substring(0, nameLength);
+                name = name.PadRight(nameLength);
 
-                // Need to print in reverse order, so that the 1st to be merged shows as the lowest on the screen
-                for (int ii = candidates.Count() - 1; ii >= 0; ii--)
-                {
-                    MergeCandidate candidate = candidates[ii];
-                    Changeset changeset = candidate.Changeset;
+                string comment = changeset.Comment.Replace("\r\n", "\\n");
+                if (comment.Length > commentLength) comment = comment.Substring(0, commentLength);
+                comment = comment.PadRight(commentLength);
 
-                    //string id = changeset.ChangesetId.ToString().Trim().PadRight(idLength);
-                    string idPartialChar = candidate.Partial ? "*" : string.Empty;
-                    string id = (idPartialChar + changeset.ChangesetId.ToString("D")).PadLeft(idLength);
-                    string date = changeset.CreationDate.ToShortDateString().PadLeft(dateLength);
-
-                    string name = changeset.OwnerDisplayName ?? "";
-                    if (name.Length > nameLength) name = name.Substring(0, nameLength);
-                    name = name.PadRight(nameLength);
-
-                    string comment = changeset.Comment.Replace("\r\n", "\\n");
-                    if (comment.Length > commentLength) comment = comment.Substring(0, commentLength);
-                    comment = comment.PadRight(commentLength);
-
-                    string text = " " + id + " | " + date + " | " + name + " | " + comment;
-                    Output.WriteLine(text);
-                }
+                string text = " " + id + " | " + date + " | " + name + " | " + comment;
+                Output.WriteLine(text);
             }
         }
 
@@ -587,15 +572,13 @@ namespace TFSMergingTool.Resources
 
             Output.WriteLine("  Associated work items ({0}):", changeset.WorkItems.Count());
             foreach (var wi in changeset.WorkItems)
-            {
-                Output.WriteLine("    " + wi.Id + ": " + wi.Title);
-            }
+                Output.WriteLine($"    {wi.Id}: {wi.Title}");
         }
 
         public WorkItemCollection QueryWorkItemCollection()
         {
             //var teamProject = _projectCollection;
-            string teamProjectName = "Revolution40";
+            string teamProjectName = "ProjectName";
             WorkItemCollection workItemCollection = _workItemStore.Query(
                                  " SELECT [System.Id], [System.WorkItemType]," +
                                  " [System.State], [System.AssignedTo], [System.Title] " +

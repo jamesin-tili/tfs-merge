@@ -103,7 +103,7 @@
                         <MenuItem Header="Copy selected to clipboard" cal:Message.Attach="MenuSelectedToClipboard" />
                         <MenuItem Header="Copy comment to clipboard" cal:Message.Attach="MenuCommentToClipboard($dataContext)" />
                         <MenuItem Header="Open Work Item in Browser" cal:Message.Attach="MenuOpenSelectedInBrowser($dataContext)" />
-                        <MenuItem Header="Update Work Item fields..." cal:Message.Attach="MenuEditWorkItemFields" />
+                        <!--<MenuItem Header="Update Work Item fields..." cal:Message.Attach="MenuEditWorkItemFields" />-->
                     </ContextMenu>
                 </DataGrid.Resources>
                 <DataGrid.RowStyle>

@@ -17,7 +17,7 @@ namespace TFSMergingTool.Resources
 {
     class MefBootstrapper : BootstrapperBase
     {
-        private CompositionContainer container;
+        private CompositionContainer _container;
 
         public MefBootstrapper()
         {
@@ -26,16 +26,16 @@ namespace TFSMergingTool.Resources
 
         protected override void Configure()
         {
-            container = new CompositionContainer(new AggregateCatalog(AssemblySource.Instance.Select(x => new AssemblyCatalog(x)).OfType<ComposablePartCatalog>()));
+            _container = new CompositionContainer(new AggregateCatalog(AssemblySource.Instance.Select(x => new AssemblyCatalog(x)).OfType<ComposablePartCatalog>()));
 
-            CompositionBatch batch = new CompositionBatch();
+            var batch = new CompositionBatch();
 
             batch.AddExportedValue<IWindowManager>(new WindowManager());
             batch.AddExportedValue<IEventAggregator>(new EventAggregator());
             batch.AddExportedValue<UserSettings>(new UserSettings());
-            batch.AddExportedValue(container);
+            batch.AddExportedValue(_container);
 
-            container.Compose(batch);
+            _container.Compose(batch);
 
             MessageBinder.SpecialValues.Add("$pressedkey", (context) =>
             {
@@ -43,9 +43,8 @@ namespace TFSMergingTool.Resources
                 // does a ToLower on the param string you add in the action message, in fact ideally
                 // all your param messages should be lowercase just in case. I don't really like this
                 // behaviour but that's how it is!
-                var keyArgs = context.EventArgs as KeyEventArgs;
 
-                if (keyArgs != null)
+                if (context.EventArgs is KeyEventArgs keyArgs)
                     return keyArgs.Key;
 
                 return null;
@@ -55,22 +54,22 @@ namespace TFSMergingTool.Resources
         protected override object GetInstance(Type serviceType, string key)
         {
             string contract = string.IsNullOrEmpty(key) ? AttributedModelServices.GetContractName(serviceType) : key;
-            var exports = container.GetExportedValues<object>(contract);
+            object[] exports = _container.GetExportedValues<object>(contract).ToArray();
 
             if (exports.Any())
                 return exports.First();
 
-            throw new Exception(string.Format("Could not locate any instances of contract {0}.", contract));
+            throw new Exception($"Could not locate any instances of contract {contract}.");
         }
 
         protected override IEnumerable<object> GetAllInstances(Type serviceType)
         {
-            return container.GetExportedValues<object>(AttributedModelServices.GetContractName(serviceType));
+            return _container.GetExportedValues<object>(AttributedModelServices.GetContractName(serviceType));
         }
 
         protected override void BuildUp(object instance)
         {
-            container.SatisfyImportsOnce(instance);
+            _container.SatisfyImportsOnce(instance);
         }
 
         protected override void OnStartup(object sender, StartupEventArgs e)
@@ -85,6 +84,5 @@ namespace TFSMergingTool.Resources
             if (e.Exception is Microsoft.TeamFoundation.TeamFoundationServiceUnavailableException)
                 MessageBox.Show("TFS Server connection is acting up (TeamFoundationServiceUnavailableException)... VS restart is recommended.");
         }
-
     }
 }

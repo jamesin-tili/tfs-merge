@@ -28,13 +28,13 @@ namespace TFSMergingTool.ConnectionSetup
         IEventAggregator EventAggregator { get; set; }
         IOutputWindow Output { get; set; }
         UserSettings UserSettings { get; set; }
-        MyTFSConnection TfsConnection { get; set; }
-        bool FirstActivated { get; set; }
+        MyTfsConnection TfsConnection { get; set; }
+        bool FirstActivationDone { get; set; }
         IPopupService Popups { get; set; }
 
         [ImportingConstructor]
         public ConnectionSetupViewModel(IEventAggregator eventAggregator, IOutputWindow output,
-            UserSettings userSettings, MyTFSConnection tfsConnection, IPopupService popups)
+            UserSettings userSettings, MyTfsConnection tfsConnection, IPopupService popups)
         {
             EventAggregator = eventAggregator;
             Output = output;
@@ -44,7 +44,7 @@ namespace TFSMergingTool.ConnectionSetup
 
             Branches = new BindableCollection<BranchViewModel>();
 
-            FirstActivated = false;
+            FirstActivationDone = false;
             Activated += ConnectionSetupViewModel_Activated;
             Deactivated += ConnectionSetupViewModel_Deactivated;
         }
@@ -53,9 +53,9 @@ namespace TFSMergingTool.ConnectionSetup
 
         private void ConnectionSetupViewModel_Activated(object sender, ActivationEventArgs e)
         {
-            if (!FirstActivated)
+            if (!FirstActivationDone)
             {
-                FirstActivated = true;
+                FirstActivationDone = true;
                 string settingsFileName = UserSettings.DefaultLocalSettingsFileName;
                 if (!System.IO.File.Exists(settingsFileName))
                 {
@@ -66,7 +66,7 @@ namespace TFSMergingTool.ConnectionSetup
                 {
                     throw new InvalidSettingsFileException("No default settings file found at application startup.");
                 }
-                loadSettingsFile(settingsFileName);
+                LoadSettingsFile(settingsFileName);
             }
             EvalButtonCanProperties();
 
@@ -84,16 +84,18 @@ namespace TFSMergingTool.ConnectionSetup
 
         public void SelectNewSettingsFile()
         {
-            var fileDialog = new OpenFileDialog();
-            fileDialog.Filter = "Settings files (settings.*.xml)|settings.*.xml";
-            fileDialog.InitialDirectory = System.IO.Directory.GetCurrentDirectory();
+            var fileDialog = new OpenFileDialog
+            {
+                Filter = "Settings files (settings.*.xml)|settings.*.xml",
+                InitialDirectory = System.IO.Directory.GetCurrentDirectory()
+            };
             if (fileDialog.ShowDialog() == true)
             {
-                loadSettingsFile(fileDialog.FileName);
+                LoadSettingsFile(fileDialog.FileName);
             }
         }
 
-        private void loadSettingsFile(string filename)
+        private void LoadSettingsFile(string filename)
         {
             Output.WriteLine("Loading settings file {0}...", filename);
             var success = UserSettings.ReadFromFile(filename);
@@ -108,8 +110,8 @@ namespace TFSMergingTool.ConnectionSetup
             Branches.Clear();
             foreach (var branch in UserSettings.BranchPathList)
             {
-                var branchWM = new BranchViewModel(branch.Item2, branch.Item1);
-                Branches.Add(branchWM);
+                var branchWm = new BranchViewModel(branch.Item2, branch.Item1);
+                Branches.Add(branchWm);
             }
 
             TfsExePath = UserSettings.TfsExecutable.FullName;
@@ -120,7 +122,7 @@ namespace TFSMergingTool.ConnectionSetup
         string _tfsExePath;
         public string TfsExePath
         {
-            get { return _tfsExePath; }
+            get => _tfsExePath;
             set
             {
                 _tfsExePath = value;
@@ -140,13 +142,12 @@ namespace TFSMergingTool.ConnectionSetup
         string _serverAddress;
         public string ServerAddress
         {
-            get { return _serverAddress; }
+            get => _serverAddress;
             set
             {
                 _serverAddress = value;
                 NotifyOfPropertyChange(() => ServerAddress);
-                var serverUri = new Uri(ServerAddress);
-                UserSettings.ServerUri = serverUri;
+                UserSettings.ServerUri = new Uri(ServerAddress);
             }
         }
 
@@ -154,12 +155,13 @@ namespace TFSMergingTool.ConnectionSetup
         {
             var found = false;
 
-            List<TeamProjectCollectionData> teamProjectCollections;
-            ConnectionState connectionState = TfsConnection.ConnectToServer(UserSettings.ServerUri, out teamProjectCollections);
+            ConnectionState connectionState = TfsConnection.ConnectToServer(UserSettings.ServerUri,
+                out List<TeamProjectCollectionData> teamProjectCollections);
+
             if (connectionState == ConnectionState.Connected)
             {
                 var numCollections = teamProjectCollections.Count;
-                Output.WriteLine("Connected to server with {0} collectios:", numCollections);
+                Output.WriteLine("Connected to server with {0} collections:", numCollections);
                 foreach (var collection in teamProjectCollections)
                     Output.WriteLine("  " + collection.Name);
 
@@ -179,8 +181,8 @@ namespace TFSMergingTool.ConnectionSetup
                     if (connectionState == ConnectionState.Connected)
                     {
                         Output.WriteLine("Connected.");
-                        Workspace[] workspaces = TfsConnection.GetWorkspaces();
-                        foreach (var workspace in workspaces)
+                        Workspace[] workSpaces = TfsConnection.GetWorkspaces();
+                        foreach (var workspace in workSpaces)
                         {
                             bool hasFolders = DoesWorkspaceContainFolders(workspace, branchPaths);
                             if (hasFolders)
@@ -191,8 +193,7 @@ namespace TFSMergingTool.ConnectionSetup
                                 break;
                             }
                         }
-                        if (found)
-                            break;
+                        if (found) break;
                         Output.WriteLine("Did not find all enabled branch folders in any one TFS workspace.");
                         Popups.ShowMessage("Did not find all enabled branch folders in any one TFS workspace.", MessageBoxImage.Exclamation);
                     }
@@ -208,9 +209,12 @@ namespace TFSMergingTool.ConnectionSetup
                 Output.WriteLine("Connection to server failed.");
                 Popups.ShowMessage("Connection to server failed.", MessageBoxImage.Error);
             }
+            
             if (!found)
                 DisconnectFromServer();
+
             EvalButtonCanProperties();
+
             return found;
         }
 
@@ -228,12 +232,12 @@ namespace TFSMergingTool.ConnectionSetup
             var foundMap = new Dictionary<string, bool>();
             foreach (var localFolder in folders)
             {
-                DirectoryInfo localDi = new DirectoryInfo(localFolder);
+                var localDi = new DirectoryInfo(localFolder);
 
                 var parentFound = false;
                 foreach (var wpFolder in workspace.Folders)
                 {
-                    DirectoryInfo wpDi = new DirectoryInfo(wpFolder.LocalItem);
+                    var wpDi = new DirectoryInfo(wpFolder.LocalItem);
                     parentFound = CheckIfIsSameOrParentOf(localDi, wpDi);
                     if (parentFound)
                     {
@@ -243,16 +247,16 @@ namespace TFSMergingTool.ConnectionSetup
                 }
                 if (!parentFound)
                     foundMap.Add(localDi.FullName, false);
-
-
             }
-            var allFound = foundMap.All(item => item.Value == true);
+
+            bool allFound = foundMap.All(item => item.Value == true);
             if (allFound)
                 Debug.Assert(foundMap.Keys.Count() == folders.Count);
+
             return allFound;
         }
 
-        private bool CheckIfIsSameOrParentOf(DirectoryInfo item, DirectoryInfo parentCandidate)
+        private static bool CheckIfIsSameOrParentOf(DirectoryInfo item, DirectoryInfo parentCandidate)
         {
             bool ret = item.FullName == parentCandidate.FullName;
             while (item.Parent != null && ret == false)
@@ -278,25 +282,13 @@ namespace TFSMergingTool.ConnectionSetup
 
         #region Button Can properties
 
-        public bool CanGotoMergeFromList
-        {
-            get { return true; }
-        }
+        public bool CanGotoMergeFromList => true;
 
-        public bool CanGotoMergeSpecificId
-        {
-            get { return CanGotoMergeFromList; }
-        }
+        public bool CanGotoMergeSpecificId => CanGotoMergeFromList;
 
-        public bool CanConnectToServer
-        {
-            get { return !TfsConnection.IsConnected; }
-        }
+        public bool CanConnectToServer => !TfsConnection.IsConnected;
 
-        public bool CanDisconnectFromServer
-        {
-            get { return TfsConnection.IsConnected; }
-        }
+        public bool CanDisconnectFromServer => TfsConnection.IsConnected;
 
         private void EvalButtonCanProperties()
         {
@@ -311,17 +303,15 @@ namespace TFSMergingTool.ConnectionSetup
         #region Branchlist
 
         public IObservableCollection<BranchViewModel> Branches { get; set; }
-        private BranchViewModel _selectedBranche;
-        public BranchViewModel SelectedBranche
+        private BranchViewModel _selectedBranch;
+        public BranchViewModel SelectedBranch
         {
-            get { return _selectedBranche; }
+            get => _selectedBranch;
             set
             {
-                if (value != _selectedBranche)
-                {
-                    _selectedBranche = value;
-                    NotifyOfPropertyChange(() => SelectedBranche);
-                }
+                if (value == _selectedBranch) return;
+                _selectedBranch = value;
+                NotifyOfPropertyChange(() => SelectedBranch);
             }
         }
 
@@ -329,46 +319,45 @@ namespace TFSMergingTool.ConnectionSetup
         {
             var item = new BranchViewModel("Write the local path here", true);
             Branches.Add(item);
-            SelectedBranche = item;
+            SelectedBranch = item;
         }
 
         public void RemoveBranch()
         {
-            var index = Branches.IndexOf(SelectedBranche);
-            if (index >= 0)
+            var index = Branches.IndexOf(SelectedBranch);
+            if (index < 0) return;
+
+            Branches.RemoveAt(index);
+            if (Branches.Count > 0)
             {
-                Branches.RemoveAt(index);
-                if (Branches.Count > 0)
-                {
-                    if (index == Branches.Count)
-                        SelectedBranche = Branches[index - 1];
-                    else
-                        SelectedBranche = Branches[index];
-                }
+                if (index == Branches.Count)
+                    SelectedBranch = Branches[index - 1];
+                else
+                    SelectedBranch = Branches[index];
             }
         }
 
         public void MoveBranchUp()
         {
-            var item = SelectedBranche;
+            var item = SelectedBranch;
             var index = Branches.IndexOf(item);
             if (index > 0)
             {
                 Branches.RemoveAt(index);
                 Branches.Insert(index - 1, item);
-                SelectedBranche = item;
+                SelectedBranch = item;
             }
         }
 
         public void MoveBranchDown()
         {
-            var item = SelectedBranche;
+            var item = SelectedBranch;
             var index = Branches.IndexOf(item);
             if (index < Branches.Count - 1)
             {
                 Branches.RemoveAt(index);
                 Branches.Insert(index + 1, item);
-                SelectedBranche = item;
+                SelectedBranch = item;
             }
         }
 
@@ -377,23 +366,22 @@ namespace TFSMergingTool.ConnectionSetup
             Branches.Clear();
             foreach (var branch in UserSettings.BranchPathList)
             {
-                var branchWM = new BranchViewModel(branch.Item2, branch.Item1);
-                Branches.Add(branchWM);
+                var branchWm = new BranchViewModel(branch.Item2, branch.Item1);
+                Branches.Add(branchWm);
             }
         }
 
         public void SaveBranches()
         {
-            if (Branches.Count > 0)
+            if (Branches.Count <= 0) return;
+
+            var pathList = new List<Tuple<bool, string>>();
+            foreach (var branch in Branches)
             {
-                var pathList = new List<Tuple<bool, string>>();
-                foreach (var branch in Branches)
-                {
-                    pathList.Add(Tuple.Create(branch.IsEnabled, branch.Path));
-                }
-                UserSettings.BranchPathList = pathList;
-                UserSettings.WriteToFile(UserSettings.DefaultLocalSettingsFileName);
+                pathList.Add(Tuple.Create(branch.IsEnabled, branch.Path));
             }
+            UserSettings.BranchPathList = pathList;
+            UserSettings.WriteToFile(UserSettings.DefaultLocalSettingsFileName);
         }
         #endregion
 
@@ -408,18 +396,21 @@ namespace TFSMergingTool.ConnectionSetup
             }
 
             MainMode newMode;
-            if (mode == 1)
-                newMode = MainMode.MergeFromList;
-            else if (mode == 2)
-                newMode = MainMode.MergeSpecificId;
-            else
-                return;
+            switch (mode)
+            {
+                case 1:
+                    newMode = MainMode.MergeFromList;
+                    break;
+                case 2:
+                    newMode = MainMode.MergeSpecificId;
+                    break;
+                default:
+                    return;
+            }
 
-            var activeBranches = from branch in Branches
-                                 where branch.IsEnabled
-                                 select branch;
+            BranchViewModel[] activeBranches = Branches.Where(branch => branch.IsEnabled).ToArray();
 
-            if (activeBranches.Count() < 2)
+            if (activeBranches.Length < 2)
             {
                 Popups.ShowMessage("Add at least 2 active branches to start merging.", MessageBoxImage.Exclamation);
             }
@@ -432,15 +423,9 @@ namespace TFSMergingTool.ConnectionSetup
 
                 if (TfsConnection.IsConnected)
                 {
-                    var branchList = new List<DirectoryInfo>();
-                    foreach (var activeBranch in activeBranches)
-                    {
-                        var dInfo = new DirectoryInfo(activeBranch.Path);
-                        branchList.Add(dInfo);
-                    }
+                    var branchList = activeBranches.Select(activeBranch => new DirectoryInfo(activeBranch.Path)).ToList();
                     EventAggregator.PublishOnUIThread(new ChangeMainModeEvent(newMode, branchList));
                 }
-
             }
         }
 

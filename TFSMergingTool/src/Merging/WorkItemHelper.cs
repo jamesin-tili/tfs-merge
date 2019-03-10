@@ -16,19 +16,14 @@ namespace TFSMergingTool.Merging
         {
             int wiCount = workItems.Count();
             if (wiCount == 0)
-            {
                 return "-";
-            }
 
             var sb = new StringBuilder();
             int ii = 0;
             foreach (var wi in workItems)
             {
                 sb.Append(wi.Id.ToString());
-                if (ii < wiCount - 1)
-                {
-                    sb.Append(", ");
-                }
+                if (ii < wiCount - 1) sb.Append(", ");
                 ii++;
             }
             return sb.ToString();
@@ -36,16 +31,8 @@ namespace TFSMergingTool.Merging
 
         public static Field GetFieldIfExists(WorkItem workItem, string fieldName)
         {
-            Field retval;
             FieldCollection fields = workItem.Fields;
-            if (fields.Contains(fieldName))
-            {
-                retval = fields[fieldName];
-            }
-            else
-            {
-                retval = null;
-            }
+            Field retval = fields.Contains(fieldName) ? fields[fieldName] : null;
             return retval;
         }
 
@@ -57,7 +44,6 @@ namespace TFSMergingTool.Merging
             string fullAddress = $@"{collectionPath}/{project}/{command}";
 
             System.Diagnostics.Process.Start(fullAddress);
-
 
             //const string workItemUrl = @"{0}://{1}:{2}/tfs/web/wi.aspx?id={3}";
             //string scheme = wi.Store.TeamProjectCollection.Uri.Scheme;

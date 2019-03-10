@@ -46,8 +46,8 @@ namespace TFSMergingTool.Resources
 
         public string ResponseText
         {
-            get { return txtResponse.Text; }
-            set { txtResponse.Text = value; }
+            get => txtResponse.Text;
+            set => txtResponse.Text = value;
         }
 
         public bool Canceled { get; set; }

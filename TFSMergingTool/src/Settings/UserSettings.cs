@@ -24,7 +24,7 @@ namespace TFSMergingTool.Settings
 
     [Export(typeof(UserSettings))]
     [PartCreationPolicy(CreationPolicy.Shared)]
-    class UserSettings
+    internal class UserSettings
     {
         public readonly string DefaultSettingsFileName = "Settings.default.xml";
         public string DefaultLocalSettingsFileName { get; set; }
@@ -81,17 +81,14 @@ namespace TFSMergingTool.Settings
             for (int ii = 0; ii < count; ii++)
             {
                 fi = new FileInfo(tryList[ii]);
-                if (fi.Exists)
-                {
-                    break;
-                }
-                else if (ii == count - 1)
+                if (fi.Exists) break;
+
+                if (ii == count - 1)
                 {
                     string msg = $"Could not find tf.exe. Tried to look in {count} places:";
                     foreach (var dir in tryList)
-                    {
                         msg += "\n  " + dir;
-                    }
+
                     System.Windows.MessageBox.Show(msg);
                 }
             }
@@ -99,7 +96,7 @@ namespace TFSMergingTool.Settings
             return fi;
         }
 
-        public void WriteToFile(string Filepath)
+        public void WriteToFile(string filepath)
         {
             var branchList = new XElement(SettingFields.BranchpathList.ToString());
 
@@ -111,7 +108,7 @@ namespace TFSMergingTool.Settings
                 branchList.Add(branchIsEnabled);
             }
 
-            var xmltree1 = new XElement("UserSettings",
+            var xmlTree1 = new XElement("UserSettings",
                 //new XElement(SettingFields.Info.ToString(), "This is the default settings file. To use your own settings, create a copy of this file, and name it " + DefaultLocalSettingsFileName),
                 new XElement(SettingFields.ServerUri.ToString(), ServerUri.ToString()),
                 new XElement(SettingFields.Username.ToString(), ServerUsernamePassword.Item1),
@@ -119,19 +116,19 @@ namespace TFSMergingTool.Settings
                 new XElement(SettingFields.TfsExePath.ToString(), TfsExecutable.FullName),
                 branchList);
 
-            xmltree1.Save(Filepath);
+            xmlTree1.Save(filepath);
         }
 
         /// <summary>
         /// Read settings from disk.
         /// </summary>
-        /// <param name="Filepath"></param>
+        /// <param name="filepath"></param>
         /// <returns>Returns true if the settings file was read succesfully. 
         /// Returns false if the settings file was not found. 
         /// Throws exception on error in reading the file.</returns>
-        public bool ReadFromFile(string Filepath)
+        public bool ReadFromFile(string filepath)
         {
-            if (!System.IO.File.Exists(Filepath))
+            if (!System.IO.File.Exists(filepath))
             {
                 IsValid = false;
                 return false;
@@ -139,7 +136,7 @@ namespace TFSMergingTool.Settings
 
             try
             {
-                XElement xmlTree = XElement.Load(Filepath);
+                var xmlTree = XElement.Load(filepath);
 
                 string username = xmlTree.Element(SettingFields.Username.ToString()).Value;
                 string password = xmlTree.Element(SettingFields.Password.ToString()).Value;
@@ -149,12 +146,13 @@ namespace TFSMergingTool.Settings
                 ServerUri = new Uri(serverUri);
 
                 TfsExecutable = new FileInfo(tfsExePathStr);
-                if (TfsExecutable.Exists == false)
-                    throw new InvalidSettingsFileException("Error when reading settings: executable file " + TfsExecutable.FullName + " does not exist.");
+                if (!TfsExecutable.Exists)
+                    throw new InvalidSettingsFileException("Error when reading settings: executable file " +
+                                                           TfsExecutable.FullName + " does not exist.");
 
                 var branchListElement = xmlTree.Element(SettingFields.BranchpathList.ToString());
-                var branchPathElements = branchListElement.Elements(SettingFields.Branchpath.ToString()).ToList();
-                var branchIsEnabledElements = branchListElement.Elements(SettingFields.BranchIsEnabled.ToString()).ToList();
+                var branchPathElements = branchListElement.Elements(SettingFields.Branchpath.ToString()).ToArray();
+                var branchIsEnabledElements = branchListElement.Elements(SettingFields.BranchIsEnabled.ToString()).ToArray();
                 var branchPathList = new List<Tuple<bool, string>>();
                 Debug.Assert(branchPathElements.Count() == branchIsEnabledElements.Count());
 
@@ -178,9 +176,7 @@ namespace TFSMergingTool.Settings
                 ServerUsernamePassword = Tuple.Create(username, password);
                 BranchPathList.Clear();
                 foreach (var path in branchPathList)
-                {
                     BranchPathList.Add(path);
-                }
             }
             catch (Exception)
             {

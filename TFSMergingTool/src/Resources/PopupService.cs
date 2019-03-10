@@ -42,12 +42,11 @@ namespace TFSMergingTool.Resources
             if (string.IsNullOrEmpty(title))
                 title = "Merging Tool";
 
-            MessageBoxResult mbResult = MessageBoxResult.Cancel;
-
+            var mbResult = MessageBoxResult.Cancel;
 
             if (Application.Current.Dispatcher.CheckAccess())
             {
-                System.Windows.Style style = new System.Windows.Style();
+                var style = new System.Windows.Style();
                 style.Setters.Add(new Setter(Xceed.Wpf.Toolkit.MessageBox.YesButtonContentProperty, YesButtonContent));
                 style.Setters.Add(new Setter(Xceed.Wpf.Toolkit.MessageBox.NoButtonContentProperty, NoButtonContent));
                 mbResult = Xceed.Wpf.Toolkit.MessageBox.Show(Application.Current.MainWindow, message, title, MessageBoxButton.YesNo, messageBoxImage, MessageBoxResult.Yes, style);
@@ -57,7 +56,7 @@ namespace TFSMergingTool.Resources
                 // Calling thread blocks.
                 mbResult = Application.Current.Dispatcher.Invoke<MessageBoxResult>(() =>
                 {
-                    System.Windows.Style style = new System.Windows.Style();
+                    var style = new System.Windows.Style();
                     style.Setters.Add(new Setter(Xceed.Wpf.Toolkit.MessageBox.YesButtonContentProperty, YesButtonContent));
                     style.Setters.Add(new Setter(Xceed.Wpf.Toolkit.MessageBox.NoButtonContentProperty, NoButtonContent));
                     return Xceed.Wpf.Toolkit.MessageBox.Show(Application.Current.MainWindow, message, title, MessageBoxButton.YesNo, messageBoxImage, MessageBoxResult.Yes, style);

@@ -29,39 +29,35 @@ namespace TFSMergingTool.src.Merging.Options
             _discard = false;
             _force = false;
             _baseless = false;
-            _useRange = false;
+            UseRange = false;
             CheckinOptions = MyCheckinOptions.None;
         }
 
         public bool Discard
         {
-            set { _discard = value; }
-            get { return MergeOptions.HasFlag(MergeOptionsEx.AlwaysAcceptMine); }
+            set => _discard = value;
+            get => MergeOptions.HasFlag(MergeOptionsEx.AlwaysAcceptMine);
         }
 
         public bool Force
         {
-            set { _force = value; }
-            get { return MergeOptions.HasFlag(MergeOptionsEx.ForceMerge); }
+            set => _force = value;
+            get => MergeOptions.HasFlag(MergeOptionsEx.ForceMerge);
         }
 
         public bool Baseless
         {
-            set { _baseless = value; }
-            get { return MergeOptions.HasFlag(MergeOptionsEx.Baseless); }
+            set => _baseless = value;
+            get => MergeOptions.HasFlag(MergeOptionsEx.Baseless);
         }
 
-        public bool UseRange
-        {
-            set { _useRange = value; }
-            get { return _useRange; }
-        }
+        public bool UseRange { set; get; }
 
         public MergeOptionsEx MergeOptions
         {
             get
             {
-                MergeOptionsEx retval = MergeOptionsEx.None;
+                var retval = MergeOptionsEx.None;
                 if (_discard) AddToMergeOptions(ref retval, MergeOptionsEx.AlwaysAcceptMine);
                 if (_force) AddToMergeOptions(ref retval, MergeOptionsEx.ForceMerge);
                 if (_baseless) AddToMergeOptions(ref retval, MergeOptionsEx.Baseless);
@@ -72,7 +68,7 @@ namespace TFSMergingTool.src.Merging.Options
 
         public MyCheckinOptions CheckinOptions;
 
-        private bool _discard, _force, _useRange, _baseless;
+        private bool _discard, _force, _baseless;
 
         /// <summary>
         /// Appends the given flag if there are already options other than None, othserwise replaces None.

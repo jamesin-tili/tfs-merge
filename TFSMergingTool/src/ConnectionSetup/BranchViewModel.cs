@@ -18,28 +18,24 @@ namespace TFSMergingTool.ConnectionSetup
         private string _path;
         public string Path
         {
-            get { return _path; }
+            get => _path;
             set
             {
-                if (value != _path)
-                {
-                    _path = value;
-                    NotifyOfPropertyChange(() => Path);
-                }
+                if (value == _path) return;
+                _path = value;
+                NotifyOfPropertyChange(() => Path);
             }
         }
 
         private bool isEnabled;
         public bool IsEnabled
         {
-            get { return isEnabled; }
+            get => isEnabled;
             set
             {
-                if (value != isEnabled)
-                {
-                    isEnabled = value;
-                    NotifyOfPropertyChange(() => IsEnabled);
-                }
+                if (value == isEnabled) return;
+                isEnabled = value;
+                NotifyOfPropertyChange(() => IsEnabled);
             }
         }
     }

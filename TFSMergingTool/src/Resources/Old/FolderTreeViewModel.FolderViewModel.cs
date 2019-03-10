@@ -43,7 +43,7 @@ namespace TFSMergingTool.Resources.FolderTree
             private string _name = string.Empty;
             public string Name
             {
-                get { return _name; }
+                get => _name;
                 set
                 {
                     _name = value;
@@ -58,7 +58,7 @@ namespace TFSMergingTool.Resources.FolderTree
             private bool _isSelected;
             public bool IsSelected
             {
-                get { return _isSelected; }
+                get => _isSelected;
                 set
                 {
                     _isSelected = value;
@@ -69,7 +69,7 @@ namespace TFSMergingTool.Resources.FolderTree
             private bool _isExpanded;
             public bool IsExpanded
             {
-                get { return _isExpanded; }
+                get => _isExpanded;
                 set
                 {
                     if (value != _isExpanded)

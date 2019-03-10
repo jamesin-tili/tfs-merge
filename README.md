@@ -26,10 +26,10 @@ Features:
     
 Usage notes:
 <ul>
-    <li>Always test the tool in a separate test project or a non-critical branch first. Start with the automic commit option disabled.</li>
+    <li><strong>Always test the tool in a separate test project or a non-critical branch first.</strong> Start with the automic commit option disabled.</li>
     <li>Uncheck the automatic commit option to customize your changes before committing them manually.</li>
     <li>
-    It is strongly advised to use a dedicated TFS workspace for merging with this tool. This is due to two reason:
+    <strong>It is strongly advised to use a dedicated TFS workspace for merging with this tool.</strong> This is due to two reason:
         <ol>
         <li>It makes merging *much* faster for large workspaces (can use a server workspace, which also requires significantly less disk space than a local workspace)
         <li>It is much safer. This tool does not keep track of "exluded" changes or what change is new or was there already. It will perform the merge operation from source to target branch, then commit everything in the target branch. Using a dedicated workspace means you should not have any pending development changes in the target branch.

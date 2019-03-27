@@ -316,7 +316,7 @@ namespace TFSMergingTool.Resources
 
             // double check
             string localPathFromWorkspace = WorkSpace.GetLocalItemForServerItem(serverPath);
-            if (localPathFromWorkspace != localPath)
+            if (!Utility.PathHelper.PathsEqual(localPathFromWorkspace, localPath))
             {
                 string message = $"When trying to set {branch.ToString()}:\n";
                 message += string.Format("Inconsistent local and server items: local {0}, server {1}, local matching server {2}.",

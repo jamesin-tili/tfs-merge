@@ -258,10 +258,10 @@ namespace TFSMergingTool.ConnectionSetup
 
         private static bool CheckIfIsSameOrParentOf(DirectoryInfo item, DirectoryInfo parentCandidate)
         {
-            bool ret = item.FullName == parentCandidate.FullName;
+            bool ret = Utility.PathHelper.PathsEqual(item.FullName, parentCandidate.FullName);
             while (item.Parent != null && ret == false)
             {
-                if (item.Parent.FullName == parentCandidate.FullName)
+                if (Utility.PathHelper.PathsEqual(item.Parent.FullName, parentCandidate.FullName))
                 {
                     ret = true;
                     break;

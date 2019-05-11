@@ -64,8 +64,8 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="RefreshBranches" Content="{iconPacks:PackIconModern Refresh}" Margin="5,0" Style="{StaticResource IconButtonStyle}"
                         ToolTip="Load branches from memory (last opened settings file)."/>
-                    <Button x:Name="SaveBranches" Content="{iconPacks:PackIconModern Save}" Style="{StaticResource IconButtonStyle}" 
-                        ToolTip="Save branches to default user settings file." />
+                    <Button x:Name="SaveSettings" Content="{iconPacks:PackIconModern Save}" Style="{StaticResource IconButtonStyle}" 
+                        ToolTip="Save branches and file paths to default user settings file." />
                 </StackPanel>
             </DockPanel>
             <StackPanel Grid.Row="8" HorizontalAlignment="Right" VerticalAlignment="Center">

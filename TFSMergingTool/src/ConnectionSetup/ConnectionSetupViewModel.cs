@@ -98,14 +98,30 @@ namespace TFSMergingTool.ConnectionSetup
         private void LoadSettingsFile(string filename)
         {
             Output.WriteLine("Loading settings file {0}...", filename);
-            var success = UserSettings.ReadFromFile(filename);
-            if (!success || !UserSettings.IsValid)
+
+            var errorMessage = string.Empty;
+            try
             {
-                var msg = "Failed to load settings file " + filename;
+                UserSettings.ReadFromFile(filename);
+            }
+            catch (InvalidSettingsFileException ex)
+            {
+                errorMessage = ex.Message;
+            }
+
+            if (!string.IsNullOrEmpty(errorMessage) || !UserSettings.IsValid)
+            {
+                var msg = $"Failed to load settings file {filename}";
+                if (!string.IsNullOrEmpty(errorMessage))
+                    msg += Environment.NewLine + errorMessage;
+                msg += Environment.NewLine + "Please fix the settings file and reload it with the button.";
+
                 Output.WriteLine(msg);
                 Popups.ShowMessage(null, msg, MessageBoxImage.Asterisk, "Load failed");
             }
+
             ServerAddress = UserSettings.ServerUri.ToString();
+            TfsExePath = UserSettings.TfsExecutable.FullName;
 
             Branches.Clear();
             foreach (var branch in UserSettings.BranchPathList)
@@ -113,8 +129,6 @@ namespace TFSMergingTool.ConnectionSetup
                 var branchWm = new BranchViewModel(branch.Item2, branch.Item1);
                 Branches.Add(branchWm);
             }
-
-            TfsExePath = UserSettings.TfsExecutable.FullName;
 
             Output.WriteLine("Reading settings finished.");
         }
@@ -371,7 +385,7 @@ namespace TFSMergingTool.ConnectionSetup
             }
         }
 
-        public void SaveBranches()
+        public void SaveSettings()
         {
             if (Branches.Count <= 0) return;
 
@@ -381,6 +395,9 @@ namespace TFSMergingTool.ConnectionSetup
                 pathList.Add(Tuple.Create(branch.IsEnabled, branch.Path));
             }
             UserSettings.BranchPathList = pathList;
+
+            UserSettings.TfsExecutable = new FileInfo(TfsExePath);
+            
             UserSettings.WriteToFile(UserSettings.DefaultLocalSettingsFileName);
         }
         #endregion

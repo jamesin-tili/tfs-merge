@@ -7,3 +7,5 @@
 /packages
 /Testing Environment/UnitTests/obj/Debug
 /Testing Environment/UnitTests/bin/Debug
+/Testing Environment/UnitTests/bin/Release
+/Testing Environment/UnitTests/obj/Release

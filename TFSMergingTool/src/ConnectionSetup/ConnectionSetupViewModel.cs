@@ -118,6 +118,8 @@ namespace TFSMergingTool.ConnectionSetup
 
                 Output.WriteLine(msg);
                 Popups.ShowMessage(null, msg, MessageBoxImage.Asterisk, "Load failed");
+
+                return;
             }
 
             ServerAddress = UserSettings.ServerUri.ToString();

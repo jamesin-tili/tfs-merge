@@ -589,7 +589,8 @@ namespace TFSMergingTool.Merging
 
                 try
                 {
-                    const bool doCheckin = true;
+                    bool doCheckin = checkinOptions.HasFlag(MyCheckinOptions.NoCheckin) == false;
+
                     Tuple<bool, string> mergeResult = await Task.Run(()
                         => MergingHelper.MergeAndCommitOneByOne(TfsConnection, changesets, BranchList, reporter, finishedProgress,
                             cancelToken, Settings.TfsExecutable, Popups, mergeOptions, doCheckin, associateWorkItems), cancelToken);
@@ -661,6 +662,7 @@ namespace TFSMergingTool.Merging
                     {
                         bool doCheckin = checkinOptions.HasFlag(MyCheckinOptions.NoCheckin) == false;
                         bool checkinSuccess = false;
+
                         if (doCheckin)
                         {
                             var idAndOwnerOfChanges = changesets.Select(cs => Tuple.Create(cs.ChangesetId, cs.OwnerDisplayName)).ToArray();
